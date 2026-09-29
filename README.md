@@ -38,6 +38,7 @@
 | [`relay.conf.example`](relay.conf.example) | Шаблон `stream`-конфига релея |
 | [`00-realip.conf.example`](00-realip.conf.example) | PROXY protocol — реальные IP для локального сайта |
 | [`domains.txt`](domains.txt) | Список доменов для релея (Anthropic + OpenAI) |
+| [`MTProto.md`](MTProto.md) | Гайд: **MTProto-прокси (mtg)** на VDS — для Telegram-приложения |
 | [`app/README.md`](app/README.md) | Документация приложения и CLI |
 
 ## Быстрый старт
