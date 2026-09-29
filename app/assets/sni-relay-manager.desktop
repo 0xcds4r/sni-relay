@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SNI Relay Manager
+Name[ru]=SNI Relay Manager
+GenericName=SNI relay control
+GenericName[ru]=Управление SNI-релеем
+Comment=Deploy and manage a self-hosted SNI relay on a VDS
+Comment[ru]=Развёртывание и управление своим SNI-релеем на VDS
+Exec=/usr/local/bin/sni-relay-manager
+Icon=sni-relay-manager
+Terminal=false
+Categories=Network;
+Keywords=sni;relay;nginx;proxy;vds;claude;chatgpt;openai;
+StartupNotify=true
+StartupWMClass=sni-relay-manager
