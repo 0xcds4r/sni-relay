@@ -1,0 +1,33 @@
+# Домены, которые релеим через VDS. По одному в строке.
+# Используется скриптами setup-vds.sh и client-hosts.sh.
+# Комментарии (# ...) и пустые строки игнорируются.
+
+# Anthropic / Claude
+claude.ai
+a.claude.ai
+console.anthropic.com
+api.anthropic.com
+platform.claude.com
+
+# OpenAI / ChatGPT
+chatgpt.com
+ab.chatgpt.com
+auth.openai.com
+auth0.openai.com
+platform.openai.com
+cdn.oaistatic.com
+files.oaiusercontent.com
+tcr9i.chat.openai.com
+webrtc.chatgpt.com
+android.chat.openai.com
+api.openai.com
+operator.chatgpt.com
+sora.chatgpt.com
+videos.openai.com
+ios.chat.openai.com
+cdn.platform.openai.com
+developers.openai.com
+sdmntprukwest.oaiusercontent.com
+sdmntpritalynorth.oaiusercontent.com
+sdmntprpolandcentral.oaiusercontent.com
+sdmntprnortheu.oaiusercontent.com
