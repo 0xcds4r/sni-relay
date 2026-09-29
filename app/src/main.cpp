@@ -4,6 +4,7 @@
 #include <QTextStream>
 #include <QFile>
 #include <QProcess>
+#include <QIcon>
 
 #include "mainwindow.h"
 #include "generator.h"
@@ -68,6 +69,12 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("rele-guide");
     QCoreApplication::setApplicationName("sni-relay-manager");
+    // Связь окна с .desktop и иконкой (Wayland/Hyprland, панели задач).
+    QGuiApplication::setDesktopFileName("sni-relay-manager");
+    QIcon ic = QIcon::fromTheme("sni-relay-manager");
+    if (ic.isNull()) ic = QIcon("/usr/share/icons/hicolor/scalable/apps/sni-relay-manager.svg");
+    if (ic.isNull()) ic = QIcon(":/sni-relay-manager.svg");
+    app.setWindowIcon(ic);
     MainWindow w;
     w.show();
     return app.exec();

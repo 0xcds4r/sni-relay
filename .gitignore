@@ -1,0 +1,18 @@
+# сборка
+app/build/
+build/
+*.o
+*.obj
+*.so
+*.a
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# НИКОГДА не публиковать: конфиг с параметрами/паролем VDS
+config.json
+*config*.local.json
+*.bak
+*.bak-*
