@@ -1,4 +1,4 @@
-# SNI Relay Manager
+# SNI Relay
 
 GUI-приложение на C++/Qt6 для управления своим SNI-релеем на VDS:
 развёртывание, домены, `/etc/hosts` на клиенте и проверка — в одном окне.
@@ -21,9 +21,17 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 - **Лог** — весь вывод выполняемых команд.
 
 Пароли и настройки хранятся в `~/.config/sni-relay-manager/config.json`
-(пароль — только если включена галка «Сохранить»).
+(`~/.config/rele-guide/sni-relay-manager/config.json`); пароль — только если
+включена галка «Сохранить».
 
-## Зависимости
+## Установка из релизов
+
+Скачай из [Releases](https://github.com/0xcds4r/sni-relay/releases/tag/sni-relay-manager):
+
+- **AppImage**: `chmod +x sni-relay-manager-*.AppImage && ./sni-relay-manager-*.AppImage`
+- **deb**: `sudo apt install ./sni-relay-manager_*_amd64.deb`
+
+## Зависимости (для сборки из исходников)
 
 - Qt6 (Widgets), CMake ≥ 3.16, компилятор C++17, Ninja/Make
 - Системные утилиты: `ssh`, `curl`, `setsid`; для прав root —
@@ -51,10 +59,12 @@ sudo cmake --install build          # /usr/local/bin/sni-relay-manager
 Удобно для скриптов и проверки:
 
 ```bash
-sni-relay-manager --print-config     # показать сгенерированный relay.conf
-sni-relay-manager --print-deploy     # показать скрипт развёртывания
-sni-relay-manager --print-rollback   # показать скрипт отката
-sni-relay-manager --print-hosts      # показать новый /etc/hosts
+sni-relay-manager --print-config        # показать сгенерированный relay.conf
+sni-relay-manager --print-deploy        # показать скрипт развёртывания
+sni-relay-manager --print-rollback      # показать скрипт отката
+sni-relay-manager --print-hosts         # показать новый /etc/hosts
+sni-relay-manager --print-config-path   # путь к config.json
+sni-relay-manager --ssh-test           # проверить SSH-подключение к VDS
 sni-relay-manager --print-config --host=1.2.3.4
 ```
 
@@ -70,10 +80,13 @@ sni-relay-manager --print-config --host=1.2.3.4
 ## Структура
 
 ```
-src/settings.h       настройки + JSON-персистенция
+src/settings.h        настройки + JSON-персистенция
 src/generator.{h,cpp} генерация relay.conf / скриптов / hosts (чистые функции)
-src/mainwindow.*     UI и запуск процессов (ssh, curl, elevation)
-src/main.cpp         точка входа + CLI-режимы
+src/sshutil.{h,cpp}   запуск ssh (askpass для пароля, базовые аргументы)
+src/mainwindow.{h,cpp} UI и запуск процессов (ssh, curl, elevation)
+src/main.cpp          точка входа + CLI-режимы
+assets/               иконки (.svg, png/), .desktop
+resources.qrc         иконка, зашитая в бинарь
 ```
 
 ## Ограничения
@@ -82,3 +95,5 @@ src/main.cpp         точка входа + CLI-режимы
   предпочтительнее.
 - Для прав root используется первый доступный способ; `systemd-run --system`
   на многих системах работает без запроса пароля.
+- Артефакты в релизах собраны на Arch (свежий glibc) — см. раздел
+  «Совместимость» в основном README.
