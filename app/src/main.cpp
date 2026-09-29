@@ -17,7 +17,6 @@ int main(int argc, char** argv) {
         const QString a = QString::fromLocal8Bit(argv[i]);
         if (a == "--print-config-path") {
             QCoreApplication app(argc, argv);
-            QCoreApplication::setOrganizationName("rele-guide");
             QCoreApplication::setApplicationName("sni-relay-manager");
             QTextStream out(stdout);
             out << Settings::configPath() << "\n";
@@ -25,7 +24,6 @@ int main(int argc, char** argv) {
         }
         if (a == "--ssh-test") {
             QCoreApplication app(argc, argv);
-            QCoreApplication::setOrganizationName("rele-guide");
             QCoreApplication::setApplicationName("sni-relay-manager");
             Settings s = Settings::load();
             QString program; QStringList args;
@@ -44,7 +42,6 @@ int main(int argc, char** argv) {
         if (a == "--print-config" || a == "--print-deploy" ||
             a == "--print-rollback" || a == "--print-hosts") {
             QCoreApplication app(argc, argv);
-            QCoreApplication::setOrganizationName("rele-guide");
             QCoreApplication::setApplicationName("sni-relay-manager");
             Settings s = Settings::load();
             if (s.domains.isEmpty()) s.domains = Settings::defaultDomains();
@@ -67,7 +64,6 @@ int main(int argc, char** argv) {
     }
 
     QApplication app(argc, argv);
-    QCoreApplication::setOrganizationName("rele-guide");
     QCoreApplication::setApplicationName("sni-relay-manager");
     // Связь окна с .desktop и иконкой (Wayland/Hyprland, панели задач).
     QGuiApplication::setDesktopFileName("sni-relay-manager");
