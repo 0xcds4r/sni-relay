@@ -270,7 +270,7 @@ IP_ТВОЕГО_VDS chatgpt.com
 
 ```bash
 # сайт на VDS цел
-curl -sI --resolve hugedev.ru:443:IP_VDS https://hugedev.ru/ | head -1
+curl -sI --resolve example.com:443:IP_VDS https://example.com/ | head -1
 
 # релей
 curl -sI https://claude.ai/ | grep -iE '^HTTP|^location|cf-mitigated'
