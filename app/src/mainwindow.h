@@ -18,11 +18,16 @@ class QCheckBox;
 class QComboBox;
 class QTabWidget;
 class QPushButton;
+class QProgressBar;
+class QResizeEvent;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* e) override;
 
 private slots:
     void onTestConnection();
@@ -79,6 +84,10 @@ private:
     void setCheckRow(int row, const QString& domain, const QString& http,
                      const QString& status, const QString& details);
 
+    // --- загрузочный оверлей ---
+    void showBusy(const QString& text);
+    void hideBusy();
+
     // --- утилиты ---
     void log(const QString& s);
     void logOk(const QString& s);
@@ -125,4 +134,10 @@ private:
     int m_checkIdx = 0;
 
     QPlainTextEdit* m_log = nullptr;
+
+    // оверлей загрузки
+    QWidget* m_busy = nullptr;
+    QLabel* m_busyLabel = nullptr;
+    QProgressBar* m_busyBar = nullptr;
+    bool m_busyCursor = false;
 };

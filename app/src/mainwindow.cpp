@@ -17,6 +17,8 @@
 #include <QPushButton>
 #include <QListWidget>
 #include <QScrollArea>
+#include <QProgressBar>
+#include <QResizeEvent>
 #include <QFont>
 #include <QPlainTextEdit>
 #include <QTextBrowser>
@@ -104,6 +106,48 @@ void MainWindow::log(const QString& s) {
 }
 void MainWindow::logOk(const QString& s)  { log("[OK] " + s); }
 void MainWindow::logErr(const QString& s) { log("[!!] " + s); }
+
+void MainWindow::showBusy(const QString& text) {
+    if (!m_busy) {
+        m_busy = new QWidget(this);
+        m_busy->setObjectName("busy");
+        m_busy->setAttribute(Qt::WA_StyledBackground, true);
+        m_busy->setStyleSheet("#busy { background: rgba(0,0,0,150); }");
+        auto* l = new QVBoxLayout(m_busy);
+        l->addStretch();
+        auto* box = new QWidget;
+        auto* bl = new QVBoxLayout(box); bl->setSpacing(12);
+        m_busyLabel = new QLabel;
+        m_busyLabel->setAlignment(Qt::AlignCenter);
+        m_busyLabel->setStyleSheet("QLabel { color: white; font-size: 14pt; background: transparent; }");
+        m_busyBar = new QProgressBar;
+        m_busyBar->setRange(0, 0);          // indeterminate
+        m_busyBar->setTextVisible(false);
+        m_busyBar->setFixedWidth(320);
+        bl->addWidget(m_busyLabel, 0, Qt::AlignHCenter);
+        bl->addWidget(m_busyBar, 0, Qt::AlignHCenter);
+        l->addWidget(box);
+        l->addStretch();
+    }
+    m_busyLabel->setText(text);
+    if (auto* cw = centralWidget()) m_busy->setGeometry(cw->geometry());
+    if (!m_busy->isVisible()) {
+        m_busy->show();
+        if (!m_busyCursor) { QApplication::setOverrideCursor(Qt::BusyCursor); m_busyCursor = true; }
+    }
+    m_busy->raise();
+}
+
+void MainWindow::hideBusy() {
+    if (m_busy && m_busy->isVisible()) m_busy->hide();
+    if (m_busyCursor) { QApplication::restoreOverrideCursor(); m_busyCursor = false; }
+}
+
+void MainWindow::resizeEvent(QResizeEvent* e) {
+    QMainWindow::resizeEvent(e);
+    if (m_busy && m_busy->isVisible() && centralWidget())
+        m_busy->setGeometry(centralWidget()->geometry());
+}
 
 bool MainWindow::commandExists(const QString& name) const {
     return !QStandardPaths::findExecutable(name).isEmpty();
@@ -865,14 +909,17 @@ rm -rf mtg.tar.gz "$D"
 /usr/local/bin/mtg --version
 echo MTG_INSTALLED
 )BASH";
-    runSsh(script, "Установка mtg на VDS", [this](bool, const QString&) { refreshMtgStatus(); });
+    showBusy("Установка mtg на VDS…");
+    runSsh(script, "Установка mtg на VDS", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); });
 }
 
 void MainWindow::onMtgGenSecret() {
     fromWidgets();
     const QString front = m_set.mtgFront.trimmed().isEmpty() ? QString("www.google.com") : m_set.mtgFront.trimmed();
     const QString script = QString("set -e\ncommand -v mtg >/dev/null || { echo NO_MTG; exit 1; }\nmtg generate-secret %1\n").arg(qshell(front));
+    showBusy("Генерация секрета…");
     runSsh(script, "Генерация секрета mtg", [this](bool ok, const QString& out) {
+        hideBusy();
         if (!ok) { logErr("не удалось сгенерировать секрет (mtg установлен?)"); return; }
         QString sec;
         for (const QString& l : out.split('\n', Qt::SkipEmptyParts)) {
@@ -919,16 +966,18 @@ void MainWindow::onMtgDeploy() {
     script += "systemctl is-active mtg\n";
     script += "ss -tlnp | grep ':" + port + "' || true\n";
     script += "echo MTG_DEPLOYED\n";
+    showBusy("Развёртывание сервиса…");
     runSsh(script, "Развёртывание mtg на VDS", [this](bool ok, const QString& out) {
+        hideBusy();
         if (ok && out.contains("MTG_DEPLOYED")) logOk("MTProto-прокси развёрнут");
         else logErr("Развёртывание mtg не удалось");
         refreshMtgStatus();
     });
 }
 
-void MainWindow::onMtgStart()   { fromWidgets(); runSsh("systemctl start mtg && systemctl is-active mtg", "Старт mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
-void MainWindow::onMtgStop()    { fromWidgets(); runSsh("systemctl stop mtg || true", "Стоп mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
-void MainWindow::onMtgRestart() { fromWidgets(); runSsh("systemctl restart mtg && systemctl is-active mtg", "Рестарт mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
+void MainWindow::onMtgStart()   { fromWidgets(); showBusy("Старт mtg…"); runSsh("systemctl start mtg && systemctl is-active mtg", "Старт mtg", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); }); }
+void MainWindow::onMtgStop()    { fromWidgets(); showBusy("Стоп mtg…"); runSsh("systemctl stop mtg || true", "Стоп mtg", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); }); }
+void MainWindow::onMtgRestart() { fromWidgets(); showBusy("Рестарт mtg…"); runSsh("systemctl restart mtg && systemctl is-active mtg", "Рестарт mtg", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); }); }
 
 void MainWindow::onMtgStatus() {
     fromWidgets();
@@ -967,6 +1016,7 @@ void MainWindow::onMtgSaveQr() {
 void MainWindow::refreshMtgStatus() {
     fromWidgets();
     if (m_set.host.trimmed().isEmpty()) { m_mtgStatus->setText("Статус: укажи VDS на вкладке «VDS»"); return; }
+    showBusy("Обновление статуса mtg…");
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
     const QString script = QString(
         "command -v mtg >/dev/null 2>&1 && echo \"VER=$(mtg --version 2>/dev/null | head -1 | awk '{print $1}')\" || echo VER=NO\n"
@@ -978,6 +1028,7 @@ void MainWindow::refreshMtgStatus() {
         "echo TOML_BIND=$(grep -E '^[[:space:]]*bind-to[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
     ).arg(port);
     runSsh(script, "Статус mtg", [this](bool ok, const QString& out) {
+        hideBusy();
         QString ver = "?", unit = "no", active = "inactive", port = "no", toml = "no", tsec, tbind;
         for (const QString& l : out.split('\n')) {
             const QString t = l.trimmed();
