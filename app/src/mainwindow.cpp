@@ -556,77 +556,6 @@ void MainWindow::buildUi() {
         tabs->addTab(cardify(w, "ПРОВЕРКА"), "Проверка");
     }
 
-    // ===== FAQ =====
-    {
-        auto* w = new QWidget;
-        auto* lay = new QVBoxLayout(w);
-        auto* tb = new QTextBrowser;
-        tb->setOpenExternalLinks(true);
-        tb->setHtml(
-            "<h2>FAQ</h2>"
-
-            "<p><b>После «Прописать hosts» ничего не открывается.</b><br>"
-            "Скорее всего включён <b>Secure DNS (DoH)</b> в браузере — он резолвит мимо "
-            "<code>/etc/hosts</code>. Выключи его. Проверка: <code>getent ahosts &lt;домен&gt;</code> "
-            "должен вернуть IP твоего VDS.</p>"
-
-            "<p><b>Chrome ходит в реальные IP, игнорируя hosts.</b><br>"
-            "В Chrome включён встроенный резолвер (AsyncDns). Запусти его с "
-            "<code>--disable-features=AsyncDns</code> (можно добавить в <code>~/.config/chromium-flags.conf</code>), "
-            "либо в <code>chrome://net-internals/#dns</code> нажми Clear host cache.</p>"
-
-            "<p><b>claude.ai / chatgpt.com показывают «Just a moment…» / 403 cf-mitigated.</b><br>"
-            "Это Cloudflare-челлендж из-за датацентрового IP VDS. Браузер обычно проходит его сам. "
-            "Если в цикле — нужен резидентный IP.</p>"
-
-            "<p><b>Редирект на «app-unavailable-in-region».</b><br>"
-            "Anthropic смотрит на страну твоего VDS. Нужен VDS в поддерживаемой стране (не РФ).</p>"
-
-            "<p><b>Telegram Desktop/мобильный не подключается.</b><br>"
-            "SNI-релей тут не поможет: клиент ходит к дата-центрам по «голым» IP (без SNI). "
-            "Нужен MTProto-прокси: "
-            "<a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">гайд по mtg</a>.</p>"
-
-            "<p><b>MTProto: статус «недоступен» / бесконечное «подключение».</b><br>"
-            "Обычно оператор режет нестандартный порт (например 10443). Включи на вкладке MTProto "
-            "<b>«Слушать на 443 через релей»</b>, нажми «Установить и развернуть» и добавь прокси заново "
-            "с портом <b>443</b> (ссылка и QR обновятся сами). "
-            "Если висит после верной ссылки — проверь, что на телефоне включена авто-дата/время "
-            "(рассинхрон часов ломает FakeTLS).</p>"
-
-            "<p><b>443 занят моим сайтом — не сломается?</b><br>"
-            "Нет. При «Слушать на 443 через релей» mtg слушает loopback-порт, а релей отдаёт его на 443 "
-            "по SNI фронт-домена (обычно <code>www.google.com</code>). Твой сайт по своему SNI "
-            "(<code>hugedev.ru</code>/default) не затрагивается. Проверяется через <code>nginx -t</code> с "
-            "автооткатом.</p>"
-
-            "<p><b>Telegram Web: не грузятся фото/видео.</b><br>"
-            "Добавь в релей и в zapret-список <code>cdn.telegram.org</code>, <code>cdn1..6.telegram.org</code>, "
-            "<code>*.web.telegram.org</code>, выключи DoH, закрой/перезапусти Chrome.</p>"
-
-            "<p><b>nginx: <code>could not build map_hash</code> при развёртывании.</b><br>"
-            "Много длинных доменов в stream-map. Обновись до 1.1.0 (там фикс) или добавь в блок "
-            "<code>stream {}</code>: <code>map_hash_bucket_size 128; map_hash_max_size 8192;</code>.</p>"
-
-            "<p><b>Сайт на VDS видит всех как 127.0.0.1.</b><br>"
-            "Не проброшены реальные IP: у перенесённого сайта должен быть "
-            "<code>proxy_protocol</code> в <code>listen</code> и <code>real_ip_header proxy_protocol;</code>.</p>"
-
-            "<p><b>Часть telegram-хостов с ошибкой (macos/cloud/oauth.telegram.org и т.п.).</b><br>"
-            "Это служебные/update/почтовые хосты Telegram, приложению не нужны — не мешают.</p>"
-
-            "<p><b>Где хранится конфиг?</b><br>"
-            "<code>~/.config/sni-relay-manager/config.json</code> (пароль — только если включена галка «Сохранить»).</p>"
-
-            "<p><b>Как добавить домен?</b><br>"
-            "Вкладка «Домены» → «Добавить» → «Развернуть/обновить» → «Прописать hosts».</p>"
-
-            "<p><b>Как откатить изменения на VDS?</b><br>"
-            "Вкладка «Релей» → «Откатить последний бэкап» (восстанавливает <code>/etc/nginx</code>).</p>"
-        );
-        lay->addWidget(tb);
-        tabs->addTab(cardify(w, "FAQ", false), "FAQ");
-    }
 
     // ===== MTProto =====
     {
@@ -871,6 +800,78 @@ void MainWindow::buildUi() {
         connect(zBtn, &QPushButton::clicked, this, &MainWindow::checkZapretOverlap);
         connect(pShow, &QPushButton::clicked, this, &MainWindow::showVdsPorts);
         connect(pFree, &QPushButton::clicked, this, &MainWindow::pickFreeMtgPort);
+    }
+
+    // ===== FAQ =====
+    {
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        auto* tb = new QTextBrowser;
+        tb->setOpenExternalLinks(true);
+        tb->setHtml(
+            "<h2>FAQ</h2>"
+
+            "<p><b>После «Прописать hosts» ничего не открывается.</b><br>"
+            "Скорее всего включён <b>Secure DNS (DoH)</b> в браузере — он резолвит мимо "
+            "<code>/etc/hosts</code>. Выключи его. Проверка: <code>getent ahosts &lt;домен&gt;</code> "
+            "должен вернуть IP твоего VDS.</p>"
+
+            "<p><b>Chrome ходит в реальные IP, игнорируя hosts.</b><br>"
+            "В Chrome включён встроенный резолвер (AsyncDns). Запусти его с "
+            "<code>--disable-features=AsyncDns</code> (можно добавить в <code>~/.config/chromium-flags.conf</code>), "
+            "либо в <code>chrome://net-internals/#dns</code> нажми Clear host cache.</p>"
+
+            "<p><b>claude.ai / chatgpt.com показывают «Just a moment…» / 403 cf-mitigated.</b><br>"
+            "Это Cloudflare-челлендж из-за датацентрового IP VDS. Браузер обычно проходит его сам. "
+            "Если в цикле — нужен резидентный IP.</p>"
+
+            "<p><b>Редирект на «app-unavailable-in-region».</b><br>"
+            "Anthropic смотрит на страну твоего VDS. Нужен VDS в поддерживаемой стране (не РФ).</p>"
+
+            "<p><b>Telegram Desktop/мобильный не подключается.</b><br>"
+            "SNI-релей тут не поможет: клиент ходит к дата-центрам по «голым» IP (без SNI). "
+            "Нужен MTProto-прокси: "
+            "<a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">гайд по mtg</a>.</p>"
+
+            "<p><b>MTProto: статус «недоступен» / бесконечное «подключение».</b><br>"
+            "Обычно оператор режет нестандартный порт (например 10443). Включи на вкладке MTProto "
+            "<b>«Слушать на 443 через релей»</b>, нажми «Установить и развернуть» и добавь прокси заново "
+            "с портом <b>443</b> (ссылка и QR обновятся сами). "
+            "Если висит после верной ссылки — проверь, что на телефоне включена авто-дата/время "
+            "(рассинхрон часов ломает FakeTLS).</p>"
+
+            "<p><b>443 занят моим сайтом — не сломается?</b><br>"
+            "Нет. При «Слушать на 443 через релей» mtg слушает loopback-порт, а релей отдаёт его на 443 "
+            "по SNI фронт-домена (обычно <code>www.google.com</code>). Твой сайт по своему SNI "
+            "(<code>hugedev.ru</code>/default) не затрагивается. Проверяется через <code>nginx -t</code> с "
+            "автооткатом.</p>"
+
+            "<p><b>Telegram Web: не грузятся фото/видео.</b><br>"
+            "Добавь в релей и в zapret-список <code>cdn.telegram.org</code>, <code>cdn1..6.telegram.org</code>, "
+            "<code>*.web.telegram.org</code>, выключи DoH, закрой/перезапусти Chrome.</p>"
+
+            "<p><b>nginx: <code>could not build map_hash</code> при развёртывании.</b><br>"
+            "Много длинных доменов в stream-map. Обновись до 1.1.0 (там фикс) или добавь в блок "
+            "<code>stream {}</code>: <code>map_hash_bucket_size 128; map_hash_max_size 8192;</code>.</p>"
+
+            "<p><b>Сайт на VDS видит всех как 127.0.0.1.</b><br>"
+            "Не проброшены реальные IP: у перенесённого сайта должен быть "
+            "<code>proxy_protocol</code> в <code>listen</code> и <code>real_ip_header proxy_protocol;</code>.</p>"
+
+            "<p><b>Часть telegram-хостов с ошибкой (macos/cloud/oauth.telegram.org и т.п.).</b><br>"
+            "Это служебные/update/почтовые хосты Telegram, приложению не нужны — не мешают.</p>"
+
+            "<p><b>Где хранится конфиг?</b><br>"
+            "<code>~/.config/sni-relay-manager/config.json</code> (пароль — только если включена галка «Сохранить»).</p>"
+
+            "<p><b>Как добавить домен?</b><br>"
+            "Вкладка «Домены» → «Добавить» → «Развернуть/обновить» → «Прописать hosts».</p>"
+
+            "<p><b>Как откатить изменения на VDS?</b><br>"
+            "Вкладка «Релей» → «Откатить последний бэкап» (восстанавливает <code>/etc/nginx</code>).</p>"
+        );
+        lay->addWidget(tb);
+        tabs->addTab(cardify(w, "FAQ", false), "FAQ");
     }
 
     // ===== О программе =====
