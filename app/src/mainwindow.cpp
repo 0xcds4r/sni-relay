@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QListWidget>
 #include <QPlainTextEdit>
+#include <QTextBrowser>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QLabel>
@@ -324,6 +325,65 @@ void MainWindow::buildUi() {
         lay->addWidget(label);
         lay->addStretch();
         tabs->addTab(w, "О программе");
+    }
+
+    // ===== FAQ =====
+    {
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        auto* tb = new QTextBrowser;
+        tb->setOpenExternalLinks(true);
+        tb->setHtml(
+            "<h2>FAQ</h2>"
+
+            "<p><b>После «Прописать hosts» ничего не открывается.</b><br>"
+            "Скорее всего включён <b>Secure DNS (DoH)</b> в браузере — он резолвит мимо "
+            "<code>/etc/hosts</code>. Выключи его. Проверка: <code>getent ahosts &lt;домен&gt;</code> "
+            "должен вернуть IP твоего VDS.</p>"
+
+            "<p><b>Chrome ходит в реальные IP, игнорируя hosts.</b><br>"
+            "В Chrome включён встроенный резолвер (AsyncDns). Запусти его с "
+            "<code>--disable-features=AsyncDns</code> (можно добавить в <code>~/.config/chromium-flags.conf</code>), "
+            "либо в <code>chrome://net-internals/#dns</code> нажми Clear host cache.</p>"
+
+            "<p><b>claude.ai / chatgpt.com показывают «Just a moment…» / 403 cf-mitigated.</b><br>"
+            "Это Cloudflare-челлендж из-за датацентрового IP VDS. Браузер обычно проходит его сам. "
+            "Если в цикле — нужен резидентный IP.</p>"
+
+            "<p><b>Редирект на «app-unavailable-in-region».</b><br>"
+            "Anthropic смотрит на страну твоего VDS. Нужен VDS в поддерживаемой стране (не РФ).</p>"
+
+            "<p><b>Telegram Desktop/мобильный не подключается.</b><br>"
+            "SNI-релей тут не поможет: клиент ходит к дата-центрам по «голым» IP (без SNI). "
+            "Нужен MTProto-прокси: "
+            "<a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">гайд по mtg</a>.</p>"
+
+            "<p><b>Telegram Web: не грузятся фото/видео.</b><br>"
+            "Добавь в релей и в zapret-список <code>cdn.telegram.org</code>, <code>cdn1..6.telegram.org</code>, "
+            "<code>*.web.telegram.org</code>, выключи DoH, закрой/перезапусти Chrome.</p>"
+
+            "<p><b>nginx: <code>could not build map_hash</code> при развёртывании.</b><br>"
+            "Много длинных доменов в stream-map. Обновись до 1.1.0 (там фикс) или добавь в блок "
+            "<code>stream {}</code>: <code>map_hash_bucket_size 128; map_hash_max_size 8192;</code>.</p>"
+
+            "<p><b>Сайт на VDS видит всех как 127.0.0.1.</b><br>"
+            "Не проброшены реальные IP: у перенесённого сайта должен быть "
+            "<code>proxy_protocol</code> в <code>listen</code> и <code>real_ip_header proxy_protocol;</code>.</p>"
+
+            "<p><b>Часть telegram-хостов с ошибкой (macos/cloud/oauth.telegram.org и т.п.).</b><br>"
+            "Это служебные/update/почтовые хосты Telegram, приложению не нужны — не мешают.</p>"
+
+            "<p><b>Где хранится конфиг?</b><br>"
+            "<code>~/.config/sni-relay-manager/config.json</code> (пароль — только если включена галка «Сохранить»).</p>"
+
+            "<p><b>Как добавить домен?</b><br>"
+            "Вкладка «Домены» → «Добавить» → «Развернуть/обновить» → «Прописать hosts».</p>"
+
+            "<p><b>Как откатить изменения на VDS?</b><br>"
+            "Вкладка «Релей» → «Откатить последний бэкап» (восстанавливает <code>/etc/nginx</code>).</p>"
+        );
+        lay->addWidget(tb);
+        tabs->addTab(w, "FAQ");
     }
 
     split->addWidget(tabs);
