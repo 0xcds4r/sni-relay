@@ -90,6 +90,9 @@ private:
     void showBusy(const QString& text);
     void hideBusy();
 
+    // --- окно с текстом (просмотр конфига и т.п.) ---
+    void showTextDialog(const QString& title, const QString& content);
+
     // --- утилиты ---
     void log(const QString& s);
     void logOk(const QString& s);

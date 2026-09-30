@@ -32,6 +32,7 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QDialog>
 #include <QColor>
 #include <QCoreApplication>
 #include <QImage>
@@ -199,6 +200,34 @@ void MainWindow::showBusy(const QString& text) {
 void MainWindow::hideBusy() {
     if (m_busy && m_busy->isVisible()) m_busy->hide();
     if (m_busyCursor) { QApplication::restoreOverrideCursor(); m_busyCursor = false; }
+}
+
+void MainWindow::showTextDialog(const QString& title, const QString& content) {
+    QDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.resize(780, 580);
+    auto* lay = new QVBoxLayout(&dlg);
+    auto* te = new QPlainTextEdit;
+    te->setReadOnly(true);
+    te->setLineWrapMode(QPlainTextEdit::NoWrap);
+    { QFont f = te->font(); f.setFamily("monospace"); te->setFont(f); }
+    te->setPlainText(content);
+    lay->addWidget(te);
+
+    auto* row = new QWidget;
+    auto* rl = new QHBoxLayout(row); rl->setContentsMargins(0, 0, 0, 0);
+    auto* copy = new QPushButton("Копировать");
+    auto* close = new QPushButton("Закрыть");
+    close->setObjectName("primary");
+    rl->addStretch(); rl->addWidget(copy); rl->addWidget(close);
+    lay->addWidget(row);
+
+    connect(copy, &QPushButton::clicked, &dlg, [this, te] {
+        QGuiApplication::clipboard()->setText(te->toPlainText());
+        logOk("Скопировано в буфер обмена");
+    });
+    connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
+    dlg.exec();
 }
 
 void MainWindow::resizeEvent(QResizeEvent* e) {
@@ -470,7 +499,11 @@ void MainWindow::buildUi() {
         lay->addStretch();
         connect(dep, &QPushButton::clicked, this, &MainWindow::onDeploy);
         connect(roll, &QPushButton::clicked, this, &MainWindow::onRollback);
-        connect(prev, &QPushButton::clicked, this, [this] { fromWidgets(); log("--- relay.conf ---\n" + generateRelayConf() + "------------------"); });
+        connect(prev, &QPushButton::clicked, this, [this] {
+            fromWidgets();
+            showTextDialog("Генерируемый relay.conf",
+                           "--- relay.conf ---\n" + generateRelayConf() + "------------------");
+        });
         tabs->addTab(cardify(w, "РЕЛЕЙ"), "Релей");
     }
 
