@@ -36,6 +36,7 @@ private slots:
     void onApplyHosts();
     void onRemoveHosts();
     void onShowHostsEntries();
+    bool writeHostsDirect(const QString& content);
     void onCheckAll();
     void addDomain();
     void removeDomain();

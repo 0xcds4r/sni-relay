@@ -8,6 +8,7 @@
 #include <QStyleFactory>
 #include <QPalette>
 #include <QColor>
+#include <QFont>
 
 #include "mainwindow.h"
 #include "generator.h"
@@ -108,6 +109,12 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QCoreApplication::setApplicationName("sni-relay-manager");
     QCoreApplication::setApplicationVersion(SRM_VERSION);
+#ifdef Q_OS_WIN
+    QFont uiFont(QStringLiteral("Noto Sans"), 10);
+    uiFont.setFamilies({ QStringLiteral("Noto Sans"), QStringLiteral("Segoe UI"),
+                         QStringLiteral("Arial") });
+    app.setFont(uiFont);
+#endif
     // Связь окна с .desktop и иконкой (Wayland/Hyprland, панели задач).
     QGuiApplication::setDesktopFileName("sni-relay-manager");
     QIcon ic = QIcon::fromTheme("sni-relay-manager");

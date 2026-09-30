@@ -41,8 +41,7 @@
 #include <QPainter>
 #include <QClipboard>
 #include <QSplitter>
-
-#include <qrencode.h>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -57,8 +56,26 @@
 static QString trim(const QString& s) { return s.trimmed(); }
 
 // Латентность до VDS: TCP-connect до 443 (fallback 80). ICMP часто заблокирован.
+static QString monoFamily() {
+#ifdef Q_OS_WIN
+    return QStringLiteral("Consolas");
+#else
+    return QStringLiteral("monospace");
+#endif
+}
+
 static QString tcpPing(const QString& host) {
     if (host.isEmpty()) return QString();
+#ifdef Q_OS_WIN
+    // Windows: замер TCP-connect через наш curl (ping.exe может отсутствовать).
+    QProcess p;
+    p.start(sshutil::tool("curl"), { "-s", "-o", "NUL", "-w", "%{time_connect}",
+                                     "--connect-timeout", "4", "--insecure", "https://" + host + "/" });
+    if (!p.waitForFinished(7000)) { p.kill(); return QString(); }
+    bool ok = false;
+    const double sec = QString::fromLocal8Bit(p.readAllStandardOutput()).trimmed().toDouble(&ok);
+    return (ok && sec > 0) ? QString::number(qRound(sec * 1000)) + " ms" : QString();
+#else
     auto measure = [&](const QString& port) -> QString {
         QProcess p;
         const QString sc = QString(
@@ -73,6 +90,7 @@ static QString tcpPing(const QString& host) {
     QString r = measure("443");
     if (r.isEmpty()) r = measure("80");
     return r;
+#endif
 }
 
 static QString tgProxyUrl(const QString& host, const QString& port, const QString& secret) {
@@ -206,7 +224,7 @@ void MainWindow::showTextDialog(const QString& title, const QString& content) {
     auto* te = new QPlainTextEdit;
     te->setReadOnly(true);
     te->setLineWrapMode(QPlainTextEdit::NoWrap);
-    { QFont f = te->font(); f.setFamily("monospace"); te->setFont(f); }
+    { QFont f = te->font(); f.setFamily(monoFamily()); te->setFont(f); }
     te->setPlainText(content);
     lay->addWidget(te);
 
@@ -290,6 +308,19 @@ void MainWindow::runSsh(const QString& script, const QString& desc, DoneFn done,
 }
 
 void MainWindow::runElevated(const QString& script, const QString& desc, DoneFn done, bool streamLog) {
+#ifdef Q_OS_WIN
+    // script — PowerShell. Запускаем через powershell.exe (для прав админа — RunAs).
+    const QString tmp = QDir::tempPath() + QString("/srm-elev-%1.ps1").arg(QCoreApplication::applicationPid());
+    {
+        QFile f(tmp);
+        if (!f.open(QIODevice::WriteOnly)) { logErr("не удалось создать временный скрипт"); if (done) done(false, QString()); return; }
+        f.write(script.toUtf8());
+        f.close();
+    }
+    QString prog = "powershell.exe";
+    QStringList args = { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", QDir::toNativeSeparators(tmp) };
+    runProcess(prog, args, QProcessEnvironment::systemEnvironment(), desc, {}, done, streamLog);
+#else
     QString tmp = QDir::tempPath() + QString("/srm-elev-%1.sh").arg(QCoreApplication::applicationPid());
     {
         QFile f(tmp);
@@ -313,6 +344,7 @@ void MainWindow::runElevated(const QString& script, const QString& desc, DoneFn 
         return;
     }
     runProcess(prog, args, QProcessEnvironment::systemEnvironment(), desc, {}, done, streamLog);
+#endif
 }
 
 // ---------- генерация конфигов ----------
@@ -323,7 +355,7 @@ QString MainWindow::remoteRollbackScript() const { return gen::rollbackScript(m_
 
 QString MainWindow::buildHosts(bool addRelay) const {
     QString current;
-    QFile f("/etc/hosts");
+    QFile f(sshutil::hostsPath());
     if (f.open(QIODevice::ReadOnly)) current = QString::fromLocal8Bit(f.readAll());
     return gen::hostsFile(m_set, addRelay, current);
 }
@@ -621,6 +653,7 @@ void MainWindow::buildUi() {
         m_mtgPort->setRange(1, 65535);
         m_mtgPort->setValue(10443);
         m_mtgPort->setFixedWidth(120);
+        m_mtgPort->setMinimumHeight(40);
         m_mtgPort->setToolTip("Порт, на котором слушает прокси. 443/80 обычно заняты сайтом/релеем.");
 
         m_mtgFront = new QComboBox;
@@ -634,7 +667,7 @@ void MainWindow::buildUi() {
         m_mtgSecret->setPlaceholderText("сгенерировать / вставить…");
         m_mtgSecret->setEchoMode(QLineEdit::Password);
         m_mtgSecret->setToolTip("Секрет прокси (пароль). Никому не передавай.");
-        { QFont mono = m_mtgSecret->font(); mono.setFamily("monospace"); m_mtgSecret->setFont(mono); }
+        { QFont mono = m_mtgSecret->font(); mono.setFamily(monoFamily()); m_mtgSecret->setFont(mono); }
         auto* secShow = new QPushButton("Показать"); secShow->setCheckable(true);
         auto* secCopy = new QPushButton("Копировать");
         secCopy->setToolTip("Скопировать секрет в буфер обмена");
@@ -1079,38 +1112,66 @@ void MainWindow::onRollback() {
 
 // ---------- слоты: клиент ----------
 
+bool MainWindow::writeHostsDirect(const QString& content) {
+    const QString h = sshutil::hostsPath();
+    if (!QFileInfo::exists(h)) return false;
+    QFile::copy(h, h + ".bak-" + QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
+    QFile f(h);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    const QByteArray data = content.toUtf8();
+    const bool ok = (f.write(data) == data.size());
+    f.close();
+    return ok;
+}
+
 void MainWindow::onApplyHosts() {
     fromWidgets();
     if (m_set.host.trimmed().isEmpty()) { logErr("Укажи хост VDS"); return; }
-    QString content = buildHosts(true);
+    const QString content = buildHosts(true);
+#ifdef Q_OS_WIN
+    if (writeHostsDirect(content)) { logOk("Домены прописаны в hosts: " + sshutil::hostsPath()); return; }
+    QString script = "$h = '" + sshutil::hostsPath() + "'\n";
+    script += "Copy-Item -Force $h \"$h.bak-$(Get-Date -Format yyyyMMddHHmmss)\"\n";
+    script += "Set-Content -Path $h -Encoding ASCII -Value @'\n" + content + "'@\n";
+    script += "& ipconfig /flushdns | Out-Null\nWrite-Output HOSTS_OK\n";
+#else
     const QString delim = "SRMEOF_HOSTS_9f3a";
     QString script = "#!/bin/bash\nset -e\n"
                      "cp -a /etc/hosts /etc/hosts.bak-$(date +%F-%H%M%S)\n"
                      "cat > /etc/hosts <<'" + delim + "'\n" + content + delim + "\n"
                      "resolvectl flush-caches 2>/dev/null || true\n"
                      "echo HOSTS_OK\n";
-    showBusy("Обновление /etc/hosts…");
-    runElevated(script, "Прописать домены в /etc/hosts", [this](bool ok, const QString& out) {
+#endif
+    showBusy("Обновление hosts…");
+    runElevated(script, "Прописать домены в hosts", [this](bool ok, const QString& out) {
         hideBusy();
-        if (ok && out.contains("HOSTS_OK")) logOk("Домены прописаны в /etc/hosts");
-        else logErr("Не удалось обновить /etc/hosts");
+        if (ok && out.contains("HOSTS_OK")) logOk("Домены прописаны в hosts");
+        else logErr("Не удалось обновить hosts");
     });
 }
 
 void MainWindow::onRemoveHosts() {
     fromWidgets();
-    QString content = buildHosts(false);
+    const QString content = buildHosts(false);
+#ifdef Q_OS_WIN
+    if (writeHostsDirect(content)) { logOk("Домены убраны из hosts: " + sshutil::hostsPath()); return; }
+    QString script = "$h = '" + sshutil::hostsPath() + "'\n";
+    script += "Copy-Item -Force $h \"$h.bak-$(Get-Date -Format yyyyMMddHHmmss)\"\n";
+    script += "Set-Content -Path $h -Encoding ASCII -Value @'\n" + content + "'@\n";
+    script += "& ipconfig /flushdns | Out-Null\nWrite-Output HOSTS_OK\n";
+#else
     const QString delim = "SRMEOF_HOSTS_9f3a";
     QString script = "#!/bin/bash\nset -e\n"
                      "cp -a /etc/hosts /etc/hosts.bak-$(date +%F-%H%M%S)\n"
                      "cat > /etc/hosts <<'" + delim + "'\n" + content + delim + "\n"
                      "resolvectl flush-caches 2>/dev/null || true\n"
                      "echo HOSTS_OK\n";
-    showBusy("Обновление /etc/hosts…");
-    runElevated(script, "Убрать домены из /etc/hosts", [this](bool ok, const QString& out) {
+#endif
+    showBusy("Обновление hosts…");
+    runElevated(script, "Убрать домены из hosts", [this](bool ok, const QString& out) {
         hideBusy();
-        if (ok && out.contains("HOSTS_OK")) logOk("Домены убраны из /etc/hosts");
-        else logErr("Не удалось обновить /etc/hosts");
+        if (ok && out.contains("HOSTS_OK")) logOk("Домены убраны из hosts");
+        else logErr("Не удалось обновить hosts");
     });
 }
 
@@ -1118,8 +1179,9 @@ void MainWindow::onShowHostsEntries() {
     fromWidgets();
     QSet<QString> want;
     for (const auto& d : m_set.domains) { QString t = d.trimmed(); if (!t.isEmpty()) want.insert(t); }
-    QFile f("/etc/hosts");
-    if (!f.open(QIODevice::ReadOnly)) { logErr("не читается /etc/hosts"); return; }
+    const QString hp = sshutil::hostsPath();
+    QFile f(hp);
+    if (!f.open(QIODevice::ReadOnly)) { logErr("не читается " + hp); return; }
     QStringList found;
     for (const QString& line : QString::fromLocal8Bit(f.readAll()).split('\n')) {
         const QStringList parts = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
@@ -1127,8 +1189,9 @@ void MainWindow::onShowHostsEntries() {
             if (want.contains(parts[i])) { found << line; break; }
     }
     const QString body = found.isEmpty() ? QString("(нет)\n") : found.join('\n') + "\n";
-    showTextDialog("Записи /etc/hosts",
-                   "--- записи /etc/hosts для доменов релея ---\n" + body + "------------------------------------------");
+    showTextDialog("Записи hosts",
+                   "--- записи hosts для доменов релея ---\n" + body +
+                   "------------------------------------------\nфайл: " + hp);
 }
 
 // ---------- слоты: проверка ----------
@@ -1177,7 +1240,7 @@ void MainWindow::launchCheckTask() {
     const QString d = m_checkQueue[m_checkIdx++];
     m_checkActive++;
     QStringList args{ "-s", "-o", "/dev/null", "-D", "-", "-m", "10", "--max-time", "10", "https://" + d + "/" };
-    runProcess("curl", args, QProcessEnvironment::systemEnvironment(), "проверка " + d, {},
+    runProcess(sshutil::tool("curl"), args, QProcessEnvironment::systemEnvironment(), "проверка " + d, {},
         [this, row, d](bool, const QString& out) {
             QString http, status = "нет ответа", details;
             for (const QString& ln : out.split('\n')) {
@@ -1472,6 +1535,12 @@ void MainWindow::onMtgOpenTelegram() {
 // ---------- Интеграции ----------
 
 void MainWindow::checkBrowser() {
+#ifdef Q_OS_WIN
+    m_intBrowserStatus->setText("Windows: флаги Chromium задаются не через .conf — укажите "
+                                "<code>--disable-features=AsyncDns</code> в ярлыке/политике вручную и "
+                                "выключите Secure DNS в настройках браузера.");
+    return;
+#endif
     QStringList lines;
     const QList<QPair<QString, QString>> files = {
         { QDir::homePath() + "/.config/chromium-flags.conf", "Chromium" },
@@ -1493,6 +1562,10 @@ void MainWindow::checkBrowser() {
 }
 
 void MainWindow::fixBrowserAsyncDns() {
+#ifdef Q_OS_WIN
+    log("Windows: добавь --disable-features=AsyncDns в ярлык Chrome/Chromium вручную.");
+    return;
+#endif
     const QByteArray flag("--disable-features=AsyncDns\n");
     auto fixFile = [&](const QString& path, const QString& name, bool applicable) -> QString {
         if (!applicable) return QString();
@@ -1521,6 +1594,10 @@ void MainWindow::fixBrowserAsyncDns() {
 }
 
 void MainWindow::checkZapretOverlap() {
+#ifdef Q_OS_WIN
+    m_intZapretStatus->setText("zapret-списки — только Linux (/opt/zapret). На Windows не применимо.");
+    return;
+#endif
     fromWidgets();
     const QStringList paths = {
         "/opt/zapret/hostlists/list-general.txt",

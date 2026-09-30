@@ -25,6 +25,9 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 - **Интеграции** — проверка/включение `--disable-features=AsyncDns` для
   Chrome/Chromium, пересечение доменов с zapret-списками, занятые/свободные
   порты на VDS.
+- **Linux и Windows** — одна кодовая база. На Windows `ssh.exe`/`curl.exe` лежат
+  рядом с `.exe`, `hosts` правится напрямую (или через PowerShell с правами
+  администратора), QR рисуется встроенным `qrcodegen`.
 - **FAQ / О программе** — разбор частых проблем, версия, автор, ссылки.
 - **Загрузочный экран** — оверлей на время длительных операций.
 - **Лог** — весь вывод выполняемых команд.
@@ -59,7 +62,12 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 Arch/CachyOS: `sudo pacman -S qt6-base qt6-svg libqrencode cmake ninja gcc pkgconf`
 Ubuntu/Debian: `sudo apt install qt6-base-dev qt6-svg-dev libqrencode-dev cmake ninja-build g++ pkg-config`
 
+Для Windows-сборки (кросс из Linux): `mingw-w64-gcc`, `cmake`, `ninja` и Qt6
+для MinGW (`win64_mingw`), внешний `libqrencode` не нужен.
+
 ## Сборка и запуск
+
+Linux:
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -72,6 +80,23 @@ cmake --build build
 ```bash
 sudo cmake --install build          # /usr/local/bin/sni-relay-manager
 ```
+
+### Windows (кросс-сборка из Linux)
+
+```bash
+cmake -S . -B build-win -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=toolchain-mingw.cmake \
+  -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/mingw_64 \
+  -DQT_HOST_PATH=/path/to/Qt/6.x.x/gcc_64 \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-win
+```
+
+Готовый `sni-relay-manager.exe` кладётся рядом с Qt-DLL (`Qt6Core/Gui/Widgets/Svg`),
+`platforms/qwindows.dll`, `styles/`, `imageformats/` и `qt.conf`, а также с
+`ssh.exe` и `curl.exe` — приложение ищет их рядом с собой. QR рисуется встроенным
+`qrcodegen`. Права администратора для правки `hosts` запрашиваются через
+PowerShell; можно запускать приложение от имени администратора.
 
 ## CLI (без GUI)
 
@@ -104,10 +129,12 @@ sni-relay-manager --print-config --host=1.2.3.4
 ```
 src/settings.h        настройки + JSON-персистенция
 src/generator.{h,cpp} генерация relay.conf / скриптов / hosts (чистые функции)
-src/sshutil.{h,cpp}   запуск ssh (askpass для пароля, базовые аргументы)
-src/qr.{h,cpp}        QR-код (libqrencode) с логотипом приложения
+src/sshutil.{h,cpp}   запуск ssh (askpass для пароля), пути утилит/hosts (Linux/Windows)
+src/qr.{h,cpp}        QR-код с логотипом (libqrencode на Linux, qrcodegen на Windows)
 src/mainwindow.{h,cpp} UI и запуск процессов (ssh, curl, elevation)
 src/main.cpp          точка входа + CLI-режимы
+third_party/qrcodegen/ встроенный генератор QR для Windows (без libqrencode)
+toolchain-mingw.cmake  кросс-сборка под Windows (MinGW-w64)
 assets/               иконки (.svg, png/), .desktop
 resources.qrc         иконка, зашитая в бинарь
 ```
@@ -121,5 +148,8 @@ resources.qrc         иконка, зашитая в бинарь
   предпочтительнее.
 - Для прав root используется первый доступный способ; `systemd-run --system`
   на многих системах работает без запроса пароля.
+- **Windows**: авторизация только по ключу (`ssh.exe` не умеет `SSH_ASKPASS`);
+  правка `hosts` требует прав администратора (запрос через PowerShell/RunAs);
+  пинг измеряется через `curl` (TCP-connect), а не ICMP.
 - Артефакты в релизах собраны на Arch (свежий glibc) — см. раздел
   «Совместимость» в основном README.

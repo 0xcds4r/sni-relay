@@ -20,4 +20,10 @@ QStringList baseArgs(const Settings& s);
 // Готовые program+args для запуска команды на VDS (stdin = скрипт).
 void prepare(const Settings& s, QString& program, QStringList& args);
 
+// Найти внешнюю утилиту: сначала рядом с приложением (bundle), потом в PATH.
+QString tool(const QString& name);
+
+// Путь к файлу hosts текущей ОС.
+QString hostsPath();
+
 } // namespace sshutil

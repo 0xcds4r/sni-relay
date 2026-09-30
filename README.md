@@ -1,7 +1,7 @@
 # SNI Relay
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux-informational)](#)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%C2%B7%20Windows-informational)](#)
 [![Qt6](https://img.shields.io/badge/Qt-6-green)](https://www.qt.io/)
 [![Release](https://img.shields.io/github/v/release/0xcds4r/sni-relay?label=release)](https://github.com/0xcds4r/sni-relay/releases)
 
@@ -32,7 +32,7 @@
 
 | Путь | Назначение |
 |---|---|
-| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6): VDS, домены, релей, hosts, проверка, **MTProto**, интеграции |
+| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6, Linux/Windows): VDS, домены, релей, hosts, проверка, **MTProto**, интеграции |
 | [`setup-vds.sh`](setup-vds.sh) | Автонастройка VDS: бэкап, конфиги, перенос сайта, `nginx -t`, reload (с откатом) |
 | [`client-hosts.sh`](client-hosts.sh) | Прописать/убрать домены в `/etc/hosts` на клиенте |
 | [`relay.conf.example`](relay.conf.example) | Шаблон `stream`-конфига релея |
@@ -49,8 +49,11 @@
 
 - **AppImage** (любой дистрибутив): `chmod +x *.AppImage && ./*.AppImage`
 - **deb** (Debian/Ubuntu): `sudo apt install ./sni-relay-manager_*_amd64.deb`
+- **Windows** (x64): распакуй `sni-relay-manager-*-windows-x64.zip` и запусти
+  `sni-relay-manager.exe`. `ssh.exe`/`curl.exe` уже внутри; вход — по SSH-ключу,
+  для правки `hosts` нужны права администратора.
 
-Или собери сам:
+Или собери сам (Linux):
 
 ```bash
 cd app
@@ -98,6 +101,8 @@ sudo bash setup-vds.sh
   `cf-mitigated: challenge` → регион ок (Cloudflare-челлендж, браузер проходит).
 - **nginx с модулем `stream`** (`ssl_preread`), root/sudo.
 - На клиенте: `ssh`, `curl`; для прав root — `systemd-run` / `pkexec` / `sudo`.
+  На Windows `ssh.exe`/`curl.exe` идут в комплекте, `hosts` правится через
+  PowerShell (нужны права администратора).
 
 ## Ручная установка
 
@@ -196,6 +201,8 @@ cp -a /etc/hosts.bak-XXXX /etc/hosts && resolvectl flush-caches
 
 - **AppImage** — Qt6 внутри, требует glibc как у Arch / Fedora latest / Ubuntu 24.04+.
 - **deb** — нужен Qt6 (`libqt6widgets6`); на старых (Ubuntu 22.04) может не запуститься.
+- **Windows (x64)** — Qt6-DLL идут в zip, ничего доустанавливать не нужно
+  (Windows 10+; собран кросс-компилятором MinGW-w64).
 
 ## Альтернативы nginx-stream
 

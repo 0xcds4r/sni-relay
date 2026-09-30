@@ -2,17 +2,42 @@
 
 #include <QPainter>
 #include <QPixmap>
+#include <QVector>
 #include <QCoreApplication>
 
+#ifdef SRM_USE_QRCODEGEN
+#include "qrcodegen.hpp"
+#else
 #include <qrencode.h>
+#endif
 
 QImage makeQrImage(const QString& text, int target) {
-    const QByteArray data = text.toUtf8();
-    // Уровень H (высокая избыточность) — чтобы логотип в центре не мешал сканированию.
-    QRcode* qr = QRcode_encodeString(data.constData(), 0, QR_ECLEVEL_H, QR_MODE_8, 1);
-    if (!qr) return QImage();
+    int n = 0;
+    QVector<bool> mod;
 
-    const int n = qr->width;
+#ifdef SRM_USE_QRCODEGEN
+    try {
+        const qrcodegen::QrCode qr =
+            qrcodegen::QrCode::encodeText(text.toUtf8().constData(), qrcodegen::QrCode::Ecc::HIGH);
+        n = qr.getSize();
+        mod.resize(n * n);
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                mod[y * n + x] = qr.getModule(x, y);
+    } catch (...) {
+        return QImage();
+    }
+#else
+    QRcode* qr = QRcode_encodeString(text.toUtf8().constData(), 0, QR_ECLEVEL_H, QR_MODE_8, 1);
+    if (!qr) return QImage();
+    n = qr->width;
+    mod.resize(n * n);
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            mod[y * n + x] = (qr->data[y * n + x] & 1);
+    QRcode_free(qr);
+#endif
+
     const int quiet = 4;
     int scale = target / (n + 2 * quiet);
     if (scale < 2) scale = 2;
@@ -27,16 +52,15 @@ QImage makeQrImage(const QString& text, int target) {
     p.setBrush(Qt::black);
     for (int y = 0; y < n; ++y)
         for (int x = 0; x < n; ++x)
-            if (qr->data[y * n + x] & 1)
+            if (mod[y * n + x])
                 p.drawRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
-    QRcode_free(qr);
 
     // Логотип по центру (в белом боксе-«quiet zone»).
     QPixmap logo(":/sni-relay-manager.svg");
     if (logo.isNull()) logo = QPixmap("/usr/share/icons/hicolor/scalable/apps/sni-relay-manager.svg");
-    if (logo.isNull()) logo = QPixmap(qApp->applicationDirPath() + "/../assets/sni-relay-manager.svg");
+    if (logo.isNull() && qApp) logo = QPixmap(qApp->applicationDirPath() + "/../assets/sni-relay-manager.svg");
     if (!logo.isNull()) {
-        const int box = dim * 24 / 100;          // 24% — безопасно при уровне H
+        const int box = dim * 24 / 100;
         const int pad = qMax(4, box / 7);
         const QPixmap sc = logo.scaled(box - 2 * pad, box - 2 * pad,
                                        Qt::KeepAspectRatio, Qt::SmoothTransformation);
