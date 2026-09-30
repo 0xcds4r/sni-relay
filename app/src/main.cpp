@@ -34,8 +34,9 @@ int main(int argc, char** argv) {
                 return 1;
             }
             QTextStream out(stdout);
+            const QString effPort = s.mtgVia443 ? QString("443") : s.mtgPort.trimmed();
             out << "https://t.me/proxy?server=" << s.host.trimmed()
-                << "&port=" << s.mtgPort.trimmed()
+                << "&port=" << effPort
                 << "&secret=" << s.mtgSecret.trimmed() << "\n";
             return 0;
         }
