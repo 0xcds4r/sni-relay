@@ -14,6 +14,7 @@ import com.hugedev.snirelay.core.Shell
 import com.hugedev.snirelay.data.Settings
 import com.hugedev.snirelay.vpn.RelayVpnService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
@@ -53,6 +54,7 @@ class AppState(app: Application) : AndroidViewModel(app) {
         private set
     var mtgActive by mutableStateOf(false)
         private set
+    private var mtgStatusInFlight = false
 
     var vpnRunning by mutableStateOf(false)
 
@@ -197,7 +199,30 @@ class AppState(app: Application) : AndroidViewModel(app) {
 
     fun refreshMtgStatus() {
         if (settings.host.isBlank()) { mtgStatus = "Статус: укажи VDS на вкладке «VDS»"; return }
+        if (mtgStatusInFlight) return
+        mtgStatusInFlight = true
+        mtgStatus = "Проверяю mtg на VDS…"
+        refreshMtgStatusAttempt(0)
+    }
+
+    private fun refreshMtgStatusAttempt(attempt: Int) {
         runSsh(Gen.mtgStatus(settings), "Статус mtg") { r ->
+            val complete = listOf("VER=", "UNIT=", "ACTIVE=", "PORT=", "TOML=")
+                .all { marker -> r.output.lineSequence().any { it.trim().startsWith(marker) } }
+            if ((!r.ok || !complete) && attempt == 0) {
+                mtgStatus = "Ответ неполный, повторяю проверку…"
+                viewModelScope.launch {
+                    delay(800)
+                    refreshMtgStatusAttempt(1)
+                }
+                return@runSsh
+            }
+            mtgStatusInFlight = false
+            if (!complete) {
+                mtgStatus = "Не удалось получить статус mtg — проверь SSH и повтори"
+                logErr("ответ статуса mtg неполный")
+                return@runSsh
+            }
             var ver = "?"; var unit = "no"; var active = "inactive"; var port = "no"; var toml = "no"
             var tsec = ""; var tbind = ""
             for (l in r.output.lines()) {
