@@ -32,6 +32,16 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 Пароли и настройки хранятся в `~/.config/sni-relay-manager/config.json`;
 пароль — только если включена галка «Сохранить».
 
+## Скриншоты
+
+| VDS | Домены | Релей |
+|---|---|---|
+| ![VDS](screenshots/01-vds.png) | ![Домены](screenshots/02-domains.png) | ![Релей](screenshots/03-relay.png) |
+| **Клиент** | **Проверка** | **MTProto** |
+| ![Клиент](screenshots/04-client.png) | ![Проверка](screenshots/05-check.png) | ![MTProto](screenshots/06-mtproto.png) |
+| **Интеграции** | **FAQ** | **О программе** |
+| ![Интеграции](screenshots/07-integrations.png) | ![FAQ](screenshots/08-faq.png) | ![О программе](screenshots/09-about.png) |
+
 ## Установка из релизов
 
 Скачай из [Releases](https://github.com/0xcds4r/sni-relay/releases/tag/sni-relay-manager):
