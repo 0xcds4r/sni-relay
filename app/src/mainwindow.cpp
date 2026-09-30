@@ -77,6 +77,27 @@ static QString tgProxyUrl(const QString& host, const QString& port, const QStrin
     return QString("https://t.me/proxy?server=%1&port=%2&secret=%3").arg(host, port, secret);
 }
 
+// Извлечь фронт-домен из секрета mtg: [0xEE][16 байт][домен].
+static QString mtgFrontFromSecret(const QString& secret) {
+    const QString s = secret.trimmed();
+    if (s.isEmpty()) return QString();
+    QByteArray b;
+    static const QRegularExpression hexRe("^[0-9a-fA-F]+$");
+    if (s.startsWith("ee") && hexRe.match(s).hasMatch())
+        b = QByteArray::fromHex(s.toLatin1());
+    else
+        b = QByteArray::fromBase64(s.toLatin1(), QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    if (b.size() > 17) {
+        QString d;
+        for (char c : b.mid(17)) {
+            const unsigned char u = static_cast<unsigned char>(c);
+            if (u >= 0x20 && u < 0x7f) d += QChar(u); else break;
+        }
+        return d.trimmed();
+    }
+    return QString();
+}
+
 void MainWindow::log(const QString& s) {
     if (!m_log) return;
     m_log->appendPlainText(s);
@@ -952,24 +973,42 @@ void MainWindow::refreshMtgStatus() {
         "[ -f /etc/systemd/system/mtg.service ] && echo UNIT=yes || echo UNIT=no\n"
         "echo \"ACTIVE=$(systemctl is-active mtg 2>/dev/null || true)\"\n"
         "ss -tlnp 2>/dev/null | grep -q ':%1 ' && echo PORT=yes || echo PORT=no\n"
+        "[ -f /etc/mtg.toml ] && echo TOML=yes || echo TOML=no\n"
+        "echo TOML_SECRET=$(grep -E '^[[:space:]]*secret[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
+        "echo TOML_BIND=$(grep -E '^[[:space:]]*bind-to[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
     ).arg(port);
     runSsh(script, "Статус mtg", [this](bool ok, const QString& out) {
-        QString ver = "?", unit = "no", active = "inactive", port = "no";
+        QString ver = "?", unit = "no", active = "inactive", port = "no", toml = "no", tsec, tbind;
         for (const QString& l : out.split('\n')) {
             const QString t = l.trimmed();
             if (t.startsWith("VER=")) ver = t.mid(4);
             else if (t.startsWith("UNIT=")) unit = t.mid(5);
             else if (t.startsWith("ACTIVE=")) active = t.mid(7);
             else if (t.startsWith("PORT=")) port = t.mid(5);
+            else if (t.startsWith("TOML=")) toml = t.mid(5);
+            else if (t.startsWith("TOML_SECRET=")) tsec = t.mid(12);
+            else if (t.startsWith("TOML_BIND=")) tbind = t.mid(10);
         }
         if (!ok && ver == "?") { m_mtgStatus->setText("Статус: не удалось получить (VDS/SSH?)"); return; }
         const bool installed = (ver != "NO" && ver != "?");
         const bool haveUnit = (unit == "yes");
         const bool isActive = (active == "active");
 
+        // если на VDS есть mtg.toml — подставляем его значения в поля
+        if (toml == "yes" && !tsec.trimmed().isEmpty()) {
+            m_mtgSecret->setText(tsec.trimmed());
+            const int idx = tbind.lastIndexOf(':');
+            const int p = (idx >= 0) ? tbind.mid(idx + 1).toInt() : 0;
+            if (p > 0) m_mtgPort->setValue(p);
+            const QString front = mtgFrontFromSecret(tsec.trimmed());
+            if (!front.isEmpty()) m_mtgFront->setCurrentText(front);
+            fromWidgets();
+        }
+
         QString s = "<b>mtg:</b> " + (installed ? ver : QString("не установлен"));
         s += " · <b>сервис:</b> " + (haveUnit ? active : QString("нет"));
         s += QString(" · <b>порт:</b> ") + (port == "yes" ? QString("слушается") : QString("не слушается"));
+        if (toml == "yes") s += " · <b>конфиг:</b> подставлен с VDS";
         m_mtgStatus->setText(s);
 
         m_mtgInstallBtn->setText(installed ? "Переустановить / обновить mtg" : "Установить mtg на VDS");
