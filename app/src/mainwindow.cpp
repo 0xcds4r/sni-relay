@@ -55,16 +55,23 @@
 
 static QString trim(const QString& s) { return s.trimmed(); }
 
-// Пинг до хоста (средний RTT). Пусто, если ICMP недоступен.
-static QString pingOnce(const QString& host) {
+// Латентность до VDS: TCP-connect до 443 (fallback 80). ICMP часто заблокирован.
+static QString tcpPing(const QString& host) {
     if (host.isEmpty()) return QString();
-    QProcess p;
-    p.start("ping", { "-c", "3", "-W", "2", "-q", host });
-    if (!p.waitForFinished(5000)) { p.kill(); p.waitForFinished(500); return QString(); }
-    const QString out = QString::fromLocal8Bit(p.readAllStandardOutput());
-    static const QRegularExpression re("[=]\\s*[0-9.]+/([0-9.]+)/");
-    const auto m = re.match(out);
-    return m.hasMatch() ? (m.captured(1) + " ms") : QString();
+    auto measure = [&](const QString& port) -> QString {
+        QProcess p;
+        const QString sc = QString(
+            "t0=$(date +%s%N); if exec 3<>/dev/tcp/%1/%2 2>/dev/null; then t1=$(date +%s%N); "
+            "echo $(( (t1-t0)/1000000 )); else echo FAIL; fi").arg(host, port);
+        p.start("bash", { "-c", sc });
+        if (!p.waitForFinished(4000)) { p.kill(); return QString(); }
+        const QString o = QString::fromLocal8Bit(p.readAllStandardOutput()).trimmed();
+        if (o.isEmpty() || o == "FAIL") return QString();
+        return o + " ms";
+    };
+    QString r = measure("443");
+    if (r.isEmpty()) r = measure("80");
+    return r;
 }
 
 // QR-код из текста (libqrencode) → QImage.
@@ -1276,7 +1283,7 @@ void MainWindow::refreshMtgStatus() {
     if (m_set.host.trimmed().isEmpty()) { m_mtgStatus->setText("Статус: укажи VDS на вкладке «VDS»"); return; }
     showBusy("Обновление статуса mtg…");
     QApplication::processEvents();
-    const QString ping = pingOnce(m_set.host.trimmed());
+    const QString ping = tcpPing(m_set.host.trimmed());
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
     const QString script = QString(
         "command -v mtg >/dev/null 2>&1 && echo \"VER=$(mtg --version 2>/dev/null | head -1 | awk '{print $1}')\" || echo VER=NO\n"
@@ -1287,7 +1294,7 @@ void MainWindow::refreshMtgStatus() {
         "echo TOML_SECRET=$(grep -E '^[[:space:]]*secret[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
         "echo TOML_BIND=$(grep -E '^[[:space:]]*bind-to[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
     ).arg(port);
-    runSsh(script, "Статус mtg", [this](bool ok, const QString& out) {
+    runSsh(script, "Статус mtg", [this, ping](bool ok, const QString& out) {
         hideBusy();
         QString ver = "?", unit = "no", active = "inactive", port = "no", toml = "no", tsec, tbind;
         for (const QString& l : out.split('\n')) {
