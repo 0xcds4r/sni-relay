@@ -57,6 +57,7 @@ private slots:
     void onMtgStatus();
     void onMtgShowQr();
     void onMtgSaveQr();
+    void onMtgOpenTelegram();
     void refreshMtgStatus();
 
 private:

@@ -19,6 +19,8 @@
 #include <QScrollArea>
 #include <QProgressBar>
 #include <QResizeEvent>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QFont>
 #include <QPlainTextEdit>
 #include <QTextBrowser>
@@ -587,8 +589,10 @@ void MainWindow::buildUi() {
         auto* qr = new QPushButton("Показать ссылку и QR");
         auto* copylink = new QPushButton("Копировать ссылку");
         copylink->setToolTip("Скопировать ссылку t.me/proxy");
+        auto* addtg = new QPushButton("Добавить в Telegram Desktop");
+        addtg->setToolTip("Открыть tg://proxy, чтобы Telegram Desktop добавил прокси автоматически");
         auto* save = new QPushButton("Сохранить QR…");
-        l3->addWidget(qr); l3->addWidget(copylink); l3->addWidget(save); l3->addStretch();
+        l3->addWidget(qr); l3->addWidget(copylink); l3->addWidget(addtg); l3->addWidget(save); l3->addStretch();
         lay->addWidget(b3);
 
         m_mtgLink = new QLabel; m_mtgLink->setTextFormat(Qt::RichText);
@@ -617,6 +621,7 @@ void MainWindow::buildUi() {
         connect(m_mtgStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshMtgStatus);
         connect(m_mtgRemoveBtn, &QPushButton::clicked, this, &MainWindow::onMtgRemove);
         connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
+        connect(addtg, &QPushButton::clicked, this, &MainWindow::onMtgOpenTelegram);
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
         connect(copylink, &QPushButton::clicked, this, [this] {
             fromWidgets();
@@ -1118,4 +1123,24 @@ echo MTG_REMOVED
         else logErr("не удалось удалить mtg");
         refreshMtgStatus();
     });
+}
+
+void MainWindow::onMtgOpenTelegram() {
+    fromWidgets();
+    const QString host = m_set.host.trimmed();
+    const QString port = m_set.mtgPort.trimmed();
+    const QString sec = m_set.mtgSecret.trimmed();
+    if (host.isEmpty() || port.isEmpty() || sec.isEmpty()) { logErr("Нужны хост VDS, порт и секрет"); return; }
+
+    QProcess chk;
+    chk.start("xdg-mime", { "query", "default", "x-scheme-handler/tg" });
+    if (chk.waitForFinished(3000)) {
+        const QString handler = QString::fromLocal8Bit(chk.readAllStandardOutput()).trimmed();
+        if (handler.isEmpty())
+            log("Telegram Desktop не зарегистрирован как обработчик tg:// — используй ссылку t.me или QR.");
+    }
+
+    const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3").arg(host, port, sec);
+    if (QDesktopServices::openUrl(QUrl(tg))) logOk("Открываю Telegram Desktop…");
+    else logErr("Не удалось открыть tg:// — Telegram Desktop установлен?");
 }
