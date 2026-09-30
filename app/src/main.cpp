@@ -5,6 +5,9 @@
 #include <QFile>
 #include <QProcess>
 #include <QIcon>
+#include <QStyleFactory>
+#include <QPalette>
+#include <QColor>
 
 #include "mainwindow.h"
 #include "generator.h"
@@ -79,6 +82,30 @@ int main(int argc, char** argv) {
     if (ic.isNull()) ic = QIcon("/usr/share/icons/hicolor/scalable/apps/sni-relay-manager.svg");
     if (ic.isNull()) ic = QIcon(":/sni-relay-manager.svg");
     app.setWindowIcon(ic);
+
+    // Если системная тема не подхватилась (напр. AppImage без platform-theme
+    // плагина) и палитра светлая — включаем тёмную (Fusion).
+    if (app.palette().color(QPalette::Window).lightness() > 128) {
+        app.setStyle(QStyleFactory::create("Fusion"));
+        QPalette dp;
+        dp.setColor(QPalette::Window, QColor(53, 53, 53));
+        dp.setColor(QPalette::WindowText, Qt::white);
+        dp.setColor(QPalette::Base, QColor(35, 35, 35));
+        dp.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+        dp.setColor(QPalette::ToolTipBase, QColor(35, 35, 35));
+        dp.setColor(QPalette::ToolTipText, Qt::white);
+        dp.setColor(QPalette::Text, Qt::white);
+        dp.setColor(QPalette::Button, QColor(53, 53, 53));
+        dp.setColor(QPalette::ButtonText, Qt::white);
+        dp.setColor(QPalette::BrightText, Qt::red);
+        dp.setColor(QPalette::Link, QColor(42, 130, 218));
+        dp.setColor(QPalette::Highlight, QColor(42, 130, 218));
+        dp.setColor(QPalette::HighlightedText, Qt::black);
+        dp.setColor(QPalette::Disabled, QPalette::Text, QColor(127, 127, 127));
+        dp.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(127, 127, 127));
+        app.setPalette(dp);
+    }
+
     MainWindow w;
     w.show();
     return app.exec();
