@@ -920,7 +920,21 @@ echo "== listening =="; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\b' || t
                        " · <b>nginx:</b> " + nginx.toHtmlEscaped() +
                        " · <b>stream:</b> " + (okStream ? QString("<span style='color:#59d17a'>да</span>")
                                                           : QString("<span style='color:#ff8f8f'>НЕТ</span>"));
-        if (!sClaude.isEmpty()) html += "<br><b>claude с VDS:</b> " + sClaude.toHtmlEscaped();
+        QString claudeStatus = "нет ответа";
+        if (!sClaude.isEmpty()) {
+            if (sClaude.contains("cf-mitigated"))
+                claudeStatus = "<span style='color:#e0a030'>challenge (Cloudflare)</span>";
+            else {
+                QRegularExpression cre("HTTP/[0-9.]+ ([0-9]{3})");
+                auto cm = cre.match(sClaude);
+                const QString code = cm.hasMatch() ? cm.captured(1) : QString();
+                if (!code.isEmpty() && (code.startsWith('2') || code.startsWith('3')))
+                    claudeStatus = "<span style='color:#59d17a'>доступен (" + code + ")</span>";
+                else if (!code.isEmpty())
+                    claudeStatus = "HTTP " + code;
+            }
+        }
+        html += "<br><b>claude с VDS:</b> " + claudeStatus;
         m_vdsStatus->setText(html);
     });
 }
