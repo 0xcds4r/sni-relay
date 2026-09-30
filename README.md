@@ -197,8 +197,6 @@ cp -a /etc/hosts.bak-XXXX /etc/hosts && resolvectl flush-caches
 - **AppImage** — Qt6 внутри, требует glibc как у Arch / Fedora latest / Ubuntu 24.04+.
 - **deb** — нужен Qt6 (`libqt6widgets6`); на старых (Ubuntu 22.04) может не запуститься.
 
-Нужны переносимые сборки — собери в контейнере Ubuntu 22.04 (CI).
-
 ## Альтернативы nginx-stream
 
 `sniproxy`, `HAProxy` (`req_ssl_sni`), `gost`, `xray/sing-box`. nginx удобен тем,
