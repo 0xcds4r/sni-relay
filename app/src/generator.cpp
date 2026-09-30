@@ -9,6 +9,8 @@ namespace gen {
 QString relayConf(const Settings& s) {
     QStringList l;
     l << "stream {";
+    l << "    map_hash_bucket_size 128;";
+    l << "    map_hash_max_size 8192;";
     l << "    map $ssl_preread_server_name $relay_backend {";
     for (const auto& d : s.domains) {
         const QString t = d.trimmed();

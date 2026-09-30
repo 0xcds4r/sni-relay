@@ -57,6 +57,8 @@ fi
 mkdir -p "$NGINX/stream-enabled"
 {
   echo "stream {"
+  echo "    map_hash_bucket_size 128;"
+  echo "    map_hash_max_size 8192;"
   echo "    map \$ssl_preread_server_name \$relay_backend {"
   while IFS= read -r line; do
     d="$(printf '%s' "$line" | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//')"

@@ -2,6 +2,8 @@
 # SNI-роутер на 443: домены из списка → релей наружу, всё остальное → локальный сайт.
 # Требует: include /etc/nginx/stream-enabled/*.conf; в /etc/nginx/nginx.conf
 stream {
+    map_hash_bucket_size 128;
+    map_hash_max_size 8192;
     map $ssl_preread_server_name $relay_backend {
         # ---- домены, которые релеим наружу ----
         claude.ai               127.0.0.1:9443;
