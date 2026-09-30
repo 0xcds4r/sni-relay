@@ -1,7 +1,7 @@
 # SNI Relay
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%C2%B7%20Windows-informational)](#)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%C2%B7%20Windows%20%C2%B7%20Android-informational)](#)
 [![Qt6](https://img.shields.io/badge/Qt-6-green)](https://www.qt.io/)
 [![Release](https://img.shields.io/github/v/release/0xcds4r/sni-relay?label=release)](https://github.com/0xcds4r/sni-relay/releases)
 
@@ -33,6 +33,7 @@
 | Путь | Назначение |
 |---|---|
 | [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6, Linux/Windows): VDS, домены, релей, hosts, проверка, **MTProto**, интеграции |
+| [`android/`](android/) | **Android-приложение** (Kotlin/Compose): SSH-пульт, MTProto и локальный DNS-VPN без root |
 | [`setup-vds.sh`](setup-vds.sh) | Автонастройка VDS: бэкап, конфиги, перенос сайта, `nginx -t`, reload (с откатом) |
 | [`client-hosts.sh`](client-hosts.sh) | Прописать/убрать домены в `/etc/hosts` на клиенте |
 | [`relay.conf.example`](relay.conf.example) | Шаблон `stream`-конфига релея |
@@ -52,6 +53,7 @@
 - **Windows** (x64): распакуй `sni-relay-manager-*-windows-x64.zip` и запусти
   `sni-relay-manager.exe`. `ssh.exe`/`curl.exe` уже внутри; вход — по SSH-ключу,
   для правки `hosts` нужны права администратора.
+- **Android**: исходники и сборка APK — в [`android/README.md`](android/README.md).
 
 Или собери сам (Linux):
 
