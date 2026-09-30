@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "generator.h"
 #include "sshutil.h"
+#include "version.h"
 
 #include <QApplication>
 #include <QWidget>
@@ -147,11 +148,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (m_set.domains.isEmpty()) m_set.domains = Settings::defaultDomains();
     buildUi();
     toWidgets();
-    log("SNI Relay Manager. Настрой VDS на вкладке «VDS», затем «Развернуть релей» и «Прописать hosts».");
+    log(QString("SNI Relay Manager %1. Настрой VDS на вкладке «VDS», затем «Развернуть релей» и «Прописать hosts».").arg(SRM_VERSION));
 }
 
 void MainWindow::buildUi() {
-    setWindowTitle("SNI Relay Manager");
+    setWindowTitle(QString("SNI Relay Manager %1").arg(SRM_VERSION));
 
     auto* central = new QWidget(this);
     auto* rootLay = new QVBoxLayout(central);

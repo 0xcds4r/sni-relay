@@ -10,11 +10,18 @@
 #include "generator.h"
 #include "settings.h"
 #include "sshutil.h"
+#include "version.h"
 
 int main(int argc, char** argv) {
     // CLI-режимы (без GUI): печать генерируемых файлов для проверки/скриптов.
     for (int i = 1; i < argc; ++i) {
         const QString a = QString::fromLocal8Bit(argv[i]);
+        if (a == "--version" || a == "-v") {
+            QCoreApplication app(argc, argv);
+            QTextStream out(stdout);
+            out << "sni-relay-manager " << SRM_VERSION << "\n";
+            return 0;
+        }
         if (a == "--print-config-path") {
             QCoreApplication app(argc, argv);
             QCoreApplication::setApplicationName("sni-relay-manager");
@@ -65,6 +72,7 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QCoreApplication::setApplicationName("sni-relay-manager");
+    QCoreApplication::setApplicationVersion(SRM_VERSION);
     // Связь окна с .desktop и иконкой (Wayland/Hyprland, панели задач).
     QGuiApplication::setDesktopFileName("sni-relay-manager");
     QIcon ic = QIcon::fromTheme("sni-relay-manager");

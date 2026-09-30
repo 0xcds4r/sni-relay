@@ -64,6 +64,7 @@ sni-relay-manager --print-rollback      # показать скрипт отка
 sni-relay-manager --print-hosts         # показать новый /etc/hosts
 sni-relay-manager --print-config-path   # путь к config.json
 sni-relay-manager --ssh-test           # проверить SSH-подключение к VDS
+sni-relay-manager --version            # версия
 sni-relay-manager --print-config --host=1.2.3.4
 ```
 
