@@ -300,6 +300,32 @@ void MainWindow::buildUi() {
         tabs->addTab(w, "Проверка");
     }
 
+    // ===== О программе =====
+    {
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        auto* label = new QLabel;
+        label->setTextFormat(Qt::RichText);
+        label->setOpenExternalLinks(true);
+        label->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        label->setWordWrap(true);
+        label->setText(QString(
+            "<h2>SNI Relay Manager %1</h2>"
+            "<p>GUI для развёртывания и управления своим SNI-релеем на VDS:<br>"
+            "домены, <code>/etc/hosts</code>, развёртывание релея и проверка — в одном окне.</p>"
+            "<p><b>Автор:</b> 0xcds4r<br>"
+            "<b>Лицензия:</b> MIT</p>"
+            "<p><b>Ссылки:</b><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay\">Репозиторий на GitHub</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay/releases\">Релизы</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">Гайд по MTProto-прокси</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay#readme\">Документация (README)</a></p>"
+        ).arg(SRM_VERSION));
+        lay->addWidget(label);
+        lay->addStretch();
+        tabs->addTab(w, "О программе");
+    }
+
     split->addWidget(tabs);
 
     // ===== Лог =====
