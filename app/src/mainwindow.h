@@ -51,6 +51,7 @@ private slots:
     void onMtgStatus();
     void onMtgShowQr();
     void onMtgSaveQr();
+    void refreshMtgStatus();
 
 private:
     void buildUi();
@@ -109,6 +110,14 @@ private:
     QLineEdit* m_mtgSecret = nullptr;
     QLabel* m_mtgLink = nullptr;
     QLabel* m_mtgQr = nullptr;
+    QLabel* m_mtgStatus = nullptr;
+    QPushButton* m_mtgInstallBtn = nullptr;
+    QPushButton* m_mtgGenBtn = nullptr;
+    QPushButton* m_mtgDeployBtn = nullptr;
+    QPushButton* m_mtgStartBtn = nullptr;
+    QPushButton* m_mtgStopBtn = nullptr;
+    QPushButton* m_mtgRestartBtn = nullptr;
+    QPushButton* m_mtgStatusBtn = nullptr;
 
     // check
     QTableWidget* m_checkTable = nullptr;

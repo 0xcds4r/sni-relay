@@ -434,17 +434,25 @@ void MainWindow::buildUi() {
         form->addRow("Secret", m_mtgSecret);
         lay->addLayout(form);
 
+        m_mtgStatus = new QLabel("Статус: нажми «Обновить статус»");
+        m_mtgStatus->setTextFormat(Qt::RichText);
+        m_mtgStatus->setWordWrap(true);
+        lay->addWidget(m_mtgStatus);
+
         auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
-        auto* inst = new QPushButton("Установить mtg на VDS");
-        auto* gen = new QPushButton("Сгенерировать секрет");
-        l1->addWidget(inst); l1->addWidget(gen); l1->addStretch();
+        m_mtgInstallBtn = new QPushButton("Установить mtg на VDS");
+        m_mtgGenBtn = new QPushButton("Сгенерировать секрет");
+        l1->addWidget(m_mtgInstallBtn); l1->addWidget(m_mtgGenBtn); l1->addStretch();
         lay->addWidget(b1);
 
         auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
-        auto* dep = new QPushButton("Развернуть/обновить сервис");
-        auto* st = new QPushButton("Старт"); auto* sp = new QPushButton("Стоп");
-        auto* rs = new QPushButton("Рестарт"); auto* stat = new QPushButton("Статус");
-        l2->addWidget(dep); l2->addWidget(st); l2->addWidget(sp); l2->addWidget(rs); l2->addWidget(stat);
+        m_mtgDeployBtn = new QPushButton("Развернуть сервис");
+        m_mtgStartBtn = new QPushButton("Старт");
+        m_mtgStopBtn = new QPushButton("Стоп");
+        m_mtgRestartBtn = new QPushButton("Рестарт");
+        m_mtgStatusBtn = new QPushButton("Обновить статус");
+        l2->addWidget(m_mtgDeployBtn); l2->addWidget(m_mtgStartBtn); l2->addWidget(m_mtgStopBtn);
+        l2->addWidget(m_mtgRestartBtn); l2->addWidget(m_mtgStatusBtn);
         l2->addStretch();
         lay->addWidget(b2);
 
@@ -471,17 +479,22 @@ void MainWindow::buildUi() {
         lay->addWidget(hint);
         lay->addStretch();
 
-        connect(inst, &QPushButton::clicked, this, &MainWindow::onMtgInstall);
-        connect(gen, &QPushButton::clicked, this, &MainWindow::onMtgGenSecret);
-        connect(dep, &QPushButton::clicked, this, &MainWindow::onMtgDeploy);
-        connect(st, &QPushButton::clicked, this, &MainWindow::onMtgStart);
-        connect(sp, &QPushButton::clicked, this, &MainWindow::onMtgStop);
-        connect(rs, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
-        connect(stat, &QPushButton::clicked, this, &MainWindow::onMtgStatus);
+        connect(m_mtgInstallBtn, &QPushButton::clicked, this, &MainWindow::onMtgInstall);
+        connect(m_mtgGenBtn, &QPushButton::clicked, this, &MainWindow::onMtgGenSecret);
+        connect(m_mtgDeployBtn, &QPushButton::clicked, this, &MainWindow::onMtgDeploy);
+        connect(m_mtgStartBtn, &QPushButton::clicked, this, &MainWindow::onMtgStart);
+        connect(m_mtgStopBtn, &QPushButton::clicked, this, &MainWindow::onMtgStop);
+        connect(m_mtgRestartBtn, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
+        connect(m_mtgStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshMtgStatus);
         connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
 
         tabs->addTab(w, "MTProto");
+
+        // автообновление статуса при переходе на вкладку MTProto
+        connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int) {
+            if (tabs->tabText(tabs->currentIndex()) == "MTProto") refreshMtgStatus();
+        });
     }
 
     split->addWidget(tabs);
@@ -757,7 +770,7 @@ rm -rf mtg.tar.gz "$D"
 /usr/local/bin/mtg --version
 echo MTG_INSTALLED
 )BASH";
-    runSsh(script, "Установка mtg на VDS");
+    runSsh(script, "Установка mtg на VDS", [this](bool, const QString&) { refreshMtgStatus(); });
 }
 
 void MainWindow::onMtgGenSecret() {
@@ -814,12 +827,14 @@ void MainWindow::onMtgDeploy() {
     runSsh(script, "Развёртывание mtg на VDS", [this](bool ok, const QString& out) {
         if (ok && out.contains("MTG_DEPLOYED")) logOk("MTProto-прокси развёрнут");
         else logErr("Развёртывание mtg не удалось");
+        refreshMtgStatus();
     });
 }
 
-void MainWindow::onMtgStart()    { fromWidgets(); runSsh("systemctl start mtg && systemctl is-active mtg", "Старт mtg"); }
-void MainWindow::onMtgStop()     { fromWidgets(); runSsh("systemctl stop mtg && systemctl is-active mtg || true", "Стоп mtg"); }
-void MainWindow::onMtgRestart()  { fromWidgets(); runSsh("systemctl restart mtg && systemctl is-active mtg", "Рестарт mtg"); }
+void MainWindow::onMtgStart()   { fromWidgets(); runSsh("systemctl start mtg && systemctl is-active mtg", "Старт mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
+void MainWindow::onMtgStop()    { fromWidgets(); runSsh("systemctl stop mtg || true", "Стоп mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
+void MainWindow::onMtgRestart() { fromWidgets(); runSsh("systemctl restart mtg && systemctl is-active mtg", "Рестарт mtg", [this](bool, const QString&) { refreshMtgStatus(); }); }
+
 void MainWindow::onMtgStatus() {
     fromWidgets();
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
@@ -852,4 +867,43 @@ void MainWindow::onMtgSaveQr() {
     if (f.isEmpty()) return;
     if (m_mtgQr->pixmap().toImage().save(f, "PNG")) logOk("QR сохранён: " + f);
     else logErr("не удалось сохранить QR");
+}
+
+void MainWindow::refreshMtgStatus() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { m_mtgStatus->setText("Статус: укажи VDS на вкладке «VDS»"); return; }
+    const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+    const QString script = QString(
+        "command -v mtg >/dev/null 2>&1 && echo \"VER=$(mtg --version 2>/dev/null | head -1 | awk '{print $1}')\" || echo VER=NO\n"
+        "[ -f /etc/systemd/system/mtg.service ] && echo UNIT=yes || echo UNIT=no\n"
+        "echo \"ACTIVE=$(systemctl is-active mtg 2>/dev/null || true)\"\n"
+        "ss -tlnp 2>/dev/null | grep -q ':%1 ' && echo PORT=yes || echo PORT=no\n"
+    ).arg(port);
+    runSsh(script, "Статус mtg", [this](bool ok, const QString& out) {
+        QString ver = "?", unit = "no", active = "inactive", port = "no";
+        for (const QString& l : out.split('\n')) {
+            const QString t = l.trimmed();
+            if (t.startsWith("VER=")) ver = t.mid(4);
+            else if (t.startsWith("UNIT=")) unit = t.mid(5);
+            else if (t.startsWith("ACTIVE=")) active = t.mid(7);
+            else if (t.startsWith("PORT=")) port = t.mid(5);
+        }
+        if (!ok && ver == "?") { m_mtgStatus->setText("Статус: не удалось получить (VDS/SSH?)"); return; }
+        const bool installed = (ver != "NO" && ver != "?");
+        const bool haveUnit = (unit == "yes");
+        const bool isActive = (active == "active");
+
+        QString s = "<b>mtg:</b> " + (installed ? ver : QString("не установлен"));
+        s += " · <b>сервис:</b> " + (haveUnit ? active : QString("нет"));
+        s += QString(" · <b>порт:</b> ") + (port == "yes" ? QString("слушается") : QString("не слушается"));
+        m_mtgStatus->setText(s);
+
+        m_mtgInstallBtn->setText(installed ? "Переустановить / обновить mtg" : "Установить mtg на VDS");
+        m_mtgGenBtn->setEnabled(installed);
+        m_mtgDeployBtn->setText(haveUnit ? "Обновить сервис" : "Развернуть сервис");
+        m_mtgDeployBtn->setEnabled(installed);
+        m_mtgStartBtn->setEnabled(haveUnit && !isActive);
+        m_mtgStopBtn->setEnabled(haveUnit && isActive);
+        m_mtgRestartBtn->setEnabled(haveUnit);
+    });
 }
