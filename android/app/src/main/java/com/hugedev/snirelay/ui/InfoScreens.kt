@@ -2,11 +2,13 @@ package com.hugedev.snirelay.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.sp
 
 @Composable
@@ -51,6 +53,7 @@ private fun FaqItem(q: String, a: String) {
 
 @Composable
 fun AboutScreen() {
+    val uriHandler = LocalUriHandler.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SectionCard("SNI Relay Manager") {
             Text("Версия 1.3.1 (Android)", color = TextMain)
@@ -58,8 +61,21 @@ fun AboutScreen() {
             Text("© 0xcds4r · MIT", color = TextDim, fontSize = 13.sp)
         }
         SectionCard("Ссылки") {
-            Text("Исходники и гайд: github.com/0xcds4r/sni-relay", color = Accent, fontSize = 13.sp)
-            Text("MTProto-гайд: MTProto.md", color = Accent, fontSize = 13.sp)
+            Text(
+                "Исходники и гайд · github.com/0xcds4r/sni-relay",
+                color = Accent, fontSize = 13.sp,
+                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/0xcds4r/sni-relay") },
+            )
+            Text(
+                "MTProto-гайд",
+                color = Accent, fontSize = 13.sp,
+                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md") },
+            )
+            Text(
+                "Релизы",
+                color = Accent, fontSize = 13.sp,
+                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/0xcds4r/sni-relay/releases") },
+            )
         }
     }
 }
