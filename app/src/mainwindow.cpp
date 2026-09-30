@@ -563,21 +563,19 @@ void MainWindow::buildUi() {
         lay->addWidget(m_mtgStatus);
 
         auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
-        m_mtgInstallBtn = new QPushButton("Установить mtg на VDS");
-        m_mtgInstallBtn->setToolTip("Скачать последний mtg с GitHub и установить на VDS");
+        m_mtgInstallBtn = new QPushButton("Установить и развернуть");
+        m_mtgInstallBtn->setToolTip("Установить/обновить mtg, при необходимости сгенерировать секрет и развернуть сервис");
         m_mtgGenBtn = new QPushButton("Сгенерировать секрет");
         m_mtgGenBtn->setToolTip("Сгенерировать новый FakeTLS-секрет под выбранный фронт-домен");
         l1->addWidget(m_mtgInstallBtn); l1->addWidget(m_mtgGenBtn); l1->addStretch();
         lay->addWidget(b1);
 
         auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
-        m_mtgDeployBtn = new QPushButton("Развернуть сервис");
-        m_mtgDeployBtn->setToolTip("Написать /etc/mtg.toml и systemd-юнит, включить и запустить");
         m_mtgStartBtn = new QPushButton("Старт");
         m_mtgStopBtn = new QPushButton("Стоп");
         m_mtgRestartBtn = new QPushButton("Рестарт");
         m_mtgStatusBtn = new QPushButton("Обновить статус");
-        l2->addWidget(m_mtgDeployBtn); l2->addWidget(m_mtgStartBtn); l2->addWidget(m_mtgStopBtn);
+        l2->addWidget(m_mtgStartBtn); l2->addWidget(m_mtgStopBtn);
         l2->addWidget(m_mtgRestartBtn); l2->addWidget(m_mtgStatusBtn);
         l2->addStretch();
         lay->addWidget(b2);
@@ -608,9 +606,8 @@ void MainWindow::buildUi() {
         lay->addWidget(hint);
         lay->addStretch();
 
-        connect(m_mtgInstallBtn, &QPushButton::clicked, this, &MainWindow::onMtgInstall);
+        connect(m_mtgInstallBtn, &QPushButton::clicked, this, &MainWindow::onMtgInstallDeploy);
         connect(m_mtgGenBtn, &QPushButton::clicked, this, &MainWindow::onMtgGenSecret);
-        connect(m_mtgDeployBtn, &QPushButton::clicked, this, &MainWindow::onMtgDeploy);
         connect(m_mtgStartBtn, &QPushButton::clicked, this, &MainWindow::onMtgStart);
         connect(m_mtgStopBtn, &QPushButton::clicked, this, &MainWindow::onMtgStop);
         connect(m_mtgRestartBtn, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
@@ -893,9 +890,9 @@ void MainWindow::checkNext() {
 
 // ---------- MTProto (mtg) ----------
 
-void MainWindow::onMtgInstall() {
+void MainWindow::onMtgInstallDeploy() {
     fromWidgets();
-    const QString script = R"BASH(set -e
+    const QString install = R"BASH(set -e
 case "$(uname -m)" in x86_64) A=amd64;; aarch64) A=arm64;; *) A=amd64;; esac
 VER=$(curl -s --max-time 20 https://api.github.com/repos/9seconds/mtg/releases/latest | grep -oE '"tag_name": *"v[0-9.]+"' | grep -oE 'v[0-9.]+')
 [ -n "$VER" ] || { echo NO_VER; exit 1; }
@@ -910,7 +907,30 @@ rm -rf mtg.tar.gz "$D"
 echo MTG_INSTALLED
 )BASH";
     showBusy("Установка mtg на VDS…");
-    runSsh(script, "Установка mtg на VDS", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); });
+    runSsh(install, "Установка mtg на VDS", [this](bool ok, const QString& out) {
+        if (!ok || !out.contains("MTG_INSTALLED")) {
+            hideBusy(); logErr("установка mtg не удалась"); refreshMtgStatus(); return;
+        }
+        if (m_set.mtgSecret.trimmed().isEmpty()) {
+            const QString front = m_set.mtgFront.trimmed().isEmpty() ? QString("www.google.com") : m_set.mtgFront.trimmed();
+            showBusy("Генерация секрета…");
+            runSsh(QString("set -e\ncommand -v mtg >/dev/null || { echo NO_MTG; exit 1; }\nmtg generate-secret %1\n").arg(qshell(front)),
+                   "Генерация секрета mtg", [this](bool ok2, const QString& out2) {
+                if (ok2) {
+                    QString sec;
+                    for (const QString& l : out2.split('\n', Qt::SkipEmptyParts)) {
+                        const QString t = l.trimmed();
+                        if (!t.contains(' ') && t.size() >= 20 && !t.startsWith("->") && !t.startsWith("set "))
+                            sec = t;
+                    }
+                    if (!sec.isEmpty()) { m_mtgSecret->setText(sec); fromWidgets(); logOk("Секрет сгенерирован"); }
+                }
+                onMtgDeploy();   // дальше — развёртывание (свой busy + refresh)
+            });
+        } else {
+            onMtgDeploy();
+        }
+    });
 }
 
 void MainWindow::onMtgGenSecret() {
@@ -936,7 +956,7 @@ void MainWindow::onMtgGenSecret() {
 
 void MainWindow::onMtgDeploy() {
     fromWidgets();
-    if (m_set.mtgSecret.trimmed().isEmpty()) { logErr("Сначала сгенерируй секрет"); return; }
+    if (m_set.mtgSecret.trimmed().isEmpty()) { hideBusy(); logErr("Сначала сгенерируй секрет"); refreshMtgStatus(); return; }
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
     const QString ip = m_set.host.trimmed();
     const bool ip4 = QRegularExpression("^[0-9.]+$").match(ip).hasMatch();
@@ -1062,10 +1082,9 @@ void MainWindow::refreshMtgStatus() {
         if (toml == "yes") s += " · <b>конфиг:</b> подставлен с VDS";
         m_mtgStatus->setText(s);
 
-        m_mtgInstallBtn->setText(installed ? "Переустановить / обновить mtg" : "Установить mtg на VDS");
+        m_mtgInstallBtn->setText((installed && haveUnit) ? "Обновить mtg и сервис" : "Установить и развернуть");
+        m_mtgInstallBtn->setToolTip(installed ? "Обновить mtg и переразвернуть сервис" : "Установить mtg, сгенерировать секрет и развернуть сервис");
         m_mtgGenBtn->setEnabled(installed);
-        m_mtgDeployBtn->setText(haveUnit ? "Обновить сервис" : "Развернуть сервис");
-        m_mtgDeployBtn->setEnabled(installed);
         m_mtgStartBtn->setEnabled(haveUnit && !isActive);
         m_mtgStopBtn->setEnabled(haveUnit && isActive);
         m_mtgRestartBtn->setEnabled(haveUnit);

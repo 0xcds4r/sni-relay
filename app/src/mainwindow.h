@@ -47,7 +47,7 @@ private slots:
     void browseKey();
 
     // MTProto
-    void onMtgInstall();
+    void onMtgInstallDeploy();
     void onMtgGenSecret();
     void onMtgDeploy();
     void onMtgStart();
@@ -122,7 +122,6 @@ private:
     QLabel* m_mtgStatus = nullptr;
     QPushButton* m_mtgInstallBtn = nullptr;
     QPushButton* m_mtgGenBtn = nullptr;
-    QPushButton* m_mtgDeployBtn = nullptr;
     QPushButton* m_mtgStartBtn = nullptr;
     QPushButton* m_mtgStopBtn = nullptr;
     QPushButton* m_mtgRestartBtn = nullptr;
