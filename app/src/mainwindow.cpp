@@ -82,6 +82,48 @@ static QString tgProxyUrl(const QString& host, const QString& port, const QStrin
     return QString("https://t.me/proxy?server=%1&port=%2&secret=%3").arg(host, port, secret);
 }
 
+// Общий тёмный стиль приложения: карточки, скругления, синий акцент.
+static QString appStyleSheet() {
+    return QStringLiteral(R"QSS(
+        QWidget { color: #e8e8ea; }
+        QFrame#card { background: #23242c; border: 1px solid #33353f; border-radius: 14px; }
+        QLabel#cardTitle { color: #9aa0ac; font-weight: 600; letter-spacing: 1px; }
+        QLabel#mtgStatus { color: #e8e8ea; background: #1a1b21; border: 1px solid #33353f; border-radius: 12px; padding: 16px; font-size: 11pt; }
+        QLabel#hint { color: #8b8f99; }
+        QPushButton { background: #2c2e38; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 8px 14px; }
+        QPushButton:hover { background: #353846; }
+        QPushButton:pressed { background: #292b34; }
+        QPushButton:disabled { color: #6a6d77; background: #24252b; border-color: #2c2e37; }
+        QPushButton#primary { background: #2f6fed; color: #ffffff; border: none; font-weight: 600; }
+        QPushButton#primary:hover { background: #3d7cf0; }
+        QPushButton#primary:disabled { background: #2a3550; color: #8ea0c8; }
+        QPushButton#danger { background: #3a2226; color: #ff9a9a; border: 1px solid #5c3238; }
+        QPushButton#danger:hover { background: #472a2f; }
+        QPushButton#danger:disabled { background: #2a2327; color: #7a6a6c; border-color: #3a3237; }
+        QLineEdit, QSpinBox, QComboBox { background: #1a1b21; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 7px 10px; }
+        QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1px solid #2f6fed; }
+        QComboBox::drop-down { border: none; width: 22px; }
+        QComboBox QAbstractItemView { background: #23242c; color: #e8e8ea; selection-background-color: #2f6fed; border: 1px solid #3a3c48; }
+        QListWidget { background: #1a1b21; border: 1px solid #3a3c48; border-radius: 10px; padding: 4px; }
+        QListWidget::item { padding: 4px; border-radius: 6px; }
+        QListWidget::item:selected { background: #2f6fed; color: #ffffff; }
+        QTableWidget { background: #1a1b21; border: 1px solid #3a3c48; border-radius: 10px; gridline-color: #33353f; }
+        QHeaderView::section { background: #23242c; color: #9aa0ac; border: none; padding: 6px; }
+        QPlainTextEdit, QTextBrowser { background: #1a1b21; border: 1px solid #3a3c48; border-radius: 10px; }
+        QTabWidget::pane { border: 1px solid #33353f; border-radius: 12px; top: -1px; }
+        QTabBar::tab { background: transparent; color: #9aa0ac; padding: 8px 14px; margin: 2px; border-radius: 8px; }
+        QTabBar::tab:selected { background: #2c2e38; color: #ffffff; }
+        QTabBar::tab:hover { color: #ffffff; }
+        QProgressBar { border: none; background: #1a1b21; border-radius: 6px; height: 10px; text-align: center; color: #e8e8ea; }
+        QProgressBar::chunk { background: #2f6fed; border-radius: 6px; }
+        QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+        QScrollBar::handle:vertical { background: #3a3c48; border-radius: 5px; min-height: 24px; }
+        QScrollBar::handle:vertical:hover { background: #4a4d5a; }
+        QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+        QFrame#busyPanel { background: #23242c; border: 1px solid #3a3c48; border-radius: 16px; }
+    )QSS");
+}
+
 // Извлечь фронт-домен из секрета mtg: [0xEE][16 байт][домен].
 static QString mtgFrontFromSecret(const QString& secret) {
     const QString s = secret.trimmed();
@@ -115,21 +157,34 @@ void MainWindow::showBusy(const QString& text) {
         m_busy = new QWidget(this);
         m_busy->setObjectName("busy");
         m_busy->setAttribute(Qt::WA_StyledBackground, true);
-        m_busy->setStyleSheet("#busy { background: rgba(0,0,0,150); }");
+        m_busy->setStyleSheet("#busy { background: rgba(8,9,12,205); }");
         auto* l = new QVBoxLayout(m_busy);
         l->addStretch();
-        auto* box = new QWidget;
-        auto* bl = new QVBoxLayout(box); bl->setSpacing(12);
+
+        auto* panel = new QFrame;
+        panel->setObjectName("busyPanel");
+        auto* pl = new QVBoxLayout(panel);
+        pl->setContentsMargins(30, 26, 30, 26);
+        pl->setSpacing(16);
+
         m_busyLabel = new QLabel;
         m_busyLabel->setAlignment(Qt::AlignCenter);
-        m_busyLabel->setStyleSheet("QLabel { color: white; font-size: 14pt; background: transparent; }");
+        m_busyLabel->setStyleSheet("QLabel { color: #ffffff; font-size: 13pt; background: transparent; }");
         m_busyBar = new QProgressBar;
         m_busyBar->setRange(0, 0);          // indeterminate
         m_busyBar->setTextVisible(false);
-        m_busyBar->setFixedWidth(320);
-        bl->addWidget(m_busyLabel, 0, Qt::AlignHCenter);
-        bl->addWidget(m_busyBar, 0, Qt::AlignHCenter);
-        l->addWidget(box);
+        m_busyBar->setFixedWidth(340);
+        pl->addWidget(m_busyLabel, 0, Qt::AlignHCenter);
+        pl->addWidget(m_busyBar, 0, Qt::AlignHCenter);
+
+        auto* center = new QWidget;
+        center->setStyleSheet("background: transparent;");
+        auto* cwl = new QHBoxLayout(center);
+        cwl->setContentsMargins(0, 0, 0, 0);
+        cwl->addStretch();
+        cwl->addWidget(panel);
+        cwl->addStretch();
+        l->addWidget(center);
         l->addStretch();
     }
     m_busyLabel->setText(text);
@@ -260,6 +315,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
 void MainWindow::buildUi() {
     setWindowTitle(QString("SNI Relay Manager %1").arg(SRM_VERSION));
+    setStyleSheet(appStyleSheet());
 
     auto* central = new QWidget(this);
     auto* rootLay = new QVBoxLayout(central);
@@ -267,6 +323,32 @@ void MainWindow::buildUi() {
     auto* split = new QSplitter(Qt::Vertical, central);
 
     auto* tabs = new QTabWidget(split);
+
+    // Оборачивает содержимое вкладки в карточку (единый стиль).
+    auto cardify = [](QWidget* content, const QString& title, bool scroll = true) -> QWidget* {
+        auto* card = new QFrame;
+        card->setObjectName("card");
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(16, 14, 16, 16);
+        cl->setSpacing(10);
+        if (!title.isEmpty()) {
+            auto* t = new QLabel(title);
+            t->setObjectName("cardTitle");
+            cl->addWidget(t);
+        }
+        cl->addWidget(content);
+        if (!scroll) return card;
+        auto* host = new QWidget;
+        auto* hl = new QVBoxLayout(host);
+        hl->setContentsMargins(14, 14, 14, 14);
+        hl->addWidget(card);
+        hl->addStretch();
+        auto* sc = new QScrollArea;
+        sc->setWidgetResizable(true);
+        sc->setFrameShape(QFrame::NoFrame);
+        sc->setWidget(host);
+        return sc;
+    };
 
     // ===== VDS =====
     {
@@ -315,7 +397,7 @@ void MainWindow::buildUi() {
         connect(m_usePassword, &QCheckBox::toggled, m_password, &QLineEdit::setEnabled);
         connect(m_browseKey, &QPushButton::clicked, this, &MainWindow::browseKey);
 
-        tabs->addTab(w, "VDS");
+        tabs->addTab(cardify(w, "VDS"), "VDS");
     }
 
     // ===== Домены =====
@@ -368,7 +450,7 @@ void MainWindow::buildUi() {
         connect(sadd, &QPushButton::clicked, this, &MainWindow::addSiteDomain);
         connect(srem, &QPushButton::clicked, this, &MainWindow::removeSiteDomain);
 
-        tabs->addTab(w, "Домены");
+        tabs->addTab(cardify(w, "ДОМЕНЫ"), "Домены");
     }
 
     // ===== Релей =====
@@ -389,7 +471,7 @@ void MainWindow::buildUi() {
         connect(dep, &QPushButton::clicked, this, &MainWindow::onDeploy);
         connect(roll, &QPushButton::clicked, this, &MainWindow::onRollback);
         connect(prev, &QPushButton::clicked, this, [this] { fromWidgets(); log("--- relay.conf ---\n" + generateRelayConf() + "------------------"); });
-        tabs->addTab(w, "Релей");
+        tabs->addTab(cardify(w, "РЕЛЕЙ"), "Релей");
     }
 
     // ===== Клиент =====
@@ -408,7 +490,7 @@ void MainWindow::buildUi() {
         connect(a, &QPushButton::clicked, this, &MainWindow::onApplyHosts);
         connect(r, &QPushButton::clicked, this, &MainWindow::onRemoveHosts);
         connect(sh, &QPushButton::clicked, this, &MainWindow::onShowHostsEntries);
-        tabs->addTab(w, "Клиент");
+        tabs->addTab(cardify(w, "КЛИЕНТ"), "Клиент");
     }
 
     // ===== Проверка =====
@@ -424,7 +506,7 @@ void MainWindow::buildUi() {
         m_checkTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
         lay->addWidget(m_checkTable);
         connect(btn, &QPushButton::clicked, this, &MainWindow::onCheckAll);
-        tabs->addTab(w, "Проверка");
+        tabs->addTab(cardify(w, "ПРОВЕРКА"), "Проверка");
     }
 
     // ===== О программе =====
@@ -450,7 +532,7 @@ void MainWindow::buildUi() {
         ).arg(SRM_VERSION));
         lay->addWidget(label);
         lay->addStretch();
-        tabs->addTab(w, "О программе");
+        tabs->addTab(cardify(w, "О ПРОГРАММЕ", false), "О программе");
     }
 
     // ===== FAQ =====
@@ -509,7 +591,7 @@ void MainWindow::buildUi() {
             "Вкладка «Релей» → «Откатить последний бэкап» (восстанавливает <code>/etc/nginx</code>).</p>"
         );
         lay->addWidget(tb);
-        tabs->addTab(w, "FAQ");
+        tabs->addTab(cardify(w, "FAQ", false), "FAQ");
     }
 
     // ===== MTProto =====
@@ -521,28 +603,6 @@ void MainWindow::buildUi() {
         lay->setContentsMargins(16, 16, 16, 16);
         lay->setSpacing(14);
 
-        // Стиль в духе Amnezia VPN: тёмные карточки, скругления, синий акцент.
-        w->setStyleSheet(R"QSS(
-            QFrame#card { background: #23242c; border: 1px solid #33353f; border-radius: 14px; }
-            QLabel#cardTitle { color: #9aa0ac; font-weight: 600; letter-spacing: 1px; }
-            QLabel#mtgStatus { color: #e8e8ea; background: #1a1b21; border: 1px solid #33353f; border-radius: 12px; padding: 16px; font-size: 11pt; }
-            QLabel#hint { color: #8b8f99; }
-            QLabel { color: #e8e8ea; }
-            QPushButton { background: #2c2e38; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 9px 16px; }
-            QPushButton:hover { background: #353846; }
-            QPushButton:pressed { background: #292b34; }
-            QPushButton:disabled { color: #6a6d77; background: #24252b; border-color: #2c2e37; }
-            QPushButton#primary { background: #2f6fed; color: #ffffff; border: none; font-weight: 600; }
-            QPushButton#primary:hover { background: #3d7cf0; }
-            QPushButton#primary:disabled { background: #2a3550; color: #8ea0c8; }
-            QPushButton#danger { background: #3a2226; color: #ff9a9a; border: 1px solid #5c3238; }
-            QPushButton#danger:hover { background: #472a2f; }
-            QPushButton#danger:disabled { background: #2a2327; color: #7a6a6c; border-color: #3a3237; }
-            QLineEdit, QSpinBox, QComboBox { background: #1a1b21; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 7px 10px; }
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1px solid #2f6fed; }
-            QComboBox::drop-down { border: none; width: 22px; }
-            QComboBox QAbstractItemView { background: #23242c; color: #e8e8ea; selection-background-color: #2f6fed; border: 1px solid #3a3c48; }
-        )QSS");
 
         auto addCard = [&](const QString& title) -> QVBoxLayout* {
             auto* card = new QFrame;
@@ -785,7 +845,8 @@ void MainWindow::onTestConnection() {
         "ls /etc/nginx/modules-enabled 2>/dev/null | grep -q stream && echo 'stream module: yes' || echo 'stream module: NO'\n"
         "echo '== claude с VDS =='; curl -sI --max-time 10 https://claude.ai/ 2>/dev/null | grep -iE '^HTTP|^location|cf-mitigated'\n"
         "echo '== listening =='; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\\b' || true\n";
-    runSsh(script, "Проверка подключения к VDS");
+    showBusy("Проверка подключения к VDS…");
+    runSsh(script, "Проверка подключения к VDS", [this](bool, const QString&) { hideBusy(); });
 }
 
 // ---------- слоты: домены ----------
@@ -841,7 +902,9 @@ void MainWindow::onDeploy() {
     fromWidgets();
     if (m_set.host.trimmed().isEmpty()) { logErr("Укажи хост VDS"); return; }
     log("Развёртывание релея…");
+    showBusy("Развёртывание релея…");
     runSsh(remoteDeployScript(), "Развёртывание релея", [this](bool ok, const QString& out) {
+        hideBusy();
         if (ok && out.contains("DEPLOY_OK")) logOk("Релей развёрнут и nginx перезагружен");
         else logErr("Развёртывание не удалось — см. вывод выше");
     });
@@ -849,7 +912,8 @@ void MainWindow::onDeploy() {
 
 void MainWindow::onRollback() {
     fromWidgets();
-    runSsh(remoteRollbackScript(), "Откат конфига nginx на VDS");
+    showBusy("Откат конфига nginx…");
+    runSsh(remoteRollbackScript(), "Откат конфига nginx на VDS", [this](bool, const QString&) { hideBusy(); });
 }
 
 // ---------- слоты: клиент ----------
@@ -864,7 +928,9 @@ void MainWindow::onApplyHosts() {
                      "cat > /etc/hosts <<'" + delim + "'\n" + content + delim + "\n"
                      "resolvectl flush-caches 2>/dev/null || true\n"
                      "echo HOSTS_OK\n";
+    showBusy("Обновление /etc/hosts…");
     runElevated(script, "Прописать домены в /etc/hosts", [this](bool ok, const QString& out) {
+        hideBusy();
         if (ok && out.contains("HOSTS_OK")) logOk("Домены прописаны в /etc/hosts");
         else logErr("Не удалось обновить /etc/hosts");
     });
@@ -879,7 +945,9 @@ void MainWindow::onRemoveHosts() {
                      "cat > /etc/hosts <<'" + delim + "'\n" + content + delim + "\n"
                      "resolvectl flush-caches 2>/dev/null || true\n"
                      "echo HOSTS_OK\n";
+    showBusy("Обновление /etc/hosts…");
     runElevated(script, "Убрать домены из /etc/hosts", [this](bool ok, const QString& out) {
+        hideBusy();
         if (ok && out.contains("HOSTS_OK")) logOk("Домены убраны из /etc/hosts");
         else logErr("Не удалось обновить /etc/hosts");
     });
@@ -937,9 +1005,10 @@ void MainWindow::onCheckAll() {
 }
 
 void MainWindow::checkNext() {
-    if (m_checkIdx >= m_checkQueue.size()) { logOk("Проверка завершена"); return; }
+    if (m_checkIdx >= m_checkQueue.size()) { hideBusy(); logOk("Проверка завершена"); return; }
     const int row = m_checkIdx;
     const QString d = m_checkQueue[m_checkIdx++];
+    showBusy(QString("Проверка доменов… %1/%2\n%3").arg(m_checkIdx).arg(m_checkQueue.size()).arg(d));
     QStringList args{ "-s", "-o", "/dev/null", "-D", "-", "-m", "10", "--max-time", "10", "https://" + d + "/" };
     runProcess("curl", args, QProcessEnvironment::systemEnvironment(), "проверка " + d, {},
         [this, row, d](bool, const QString& out) {
