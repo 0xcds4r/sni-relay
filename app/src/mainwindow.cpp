@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "generator.h"
 #include "sshutil.h"
+#include "qr.h"
 #include "version.h"
 
 #include <QApplication>
@@ -72,30 +73,6 @@ static QString tcpPing(const QString& host) {
     QString r = measure("443");
     if (r.isEmpty()) r = measure("80");
     return r;
-}
-
-// QR-код из текста (libqrencode) → QImage.
-static QImage makeQrImage(const QString& text, int target = 300) {
-    const QByteArray data = text.toUtf8();
-    QRcode* qr = QRcode_encodeString(data.constData(), 0, QR_ECLEVEL_M, QR_MODE_8, 1);
-    if (!qr) return QImage();
-    const int n = qr->width;
-    const int quiet = 4;
-    int scale = target / (n + 2 * quiet);
-    if (scale < 2) scale = 2;
-    const int dim = (n + 2 * quiet) * scale;
-    QImage img(dim, dim, QImage::Format_RGB32);
-    img.fill(Qt::white);
-    QPainter p(&img);
-    p.setPen(Qt::NoPen);
-    p.setBrush(Qt::black);
-    for (int y = 0; y < n; ++y)
-        for (int x = 0; x < n; ++x)
-            if (qr->data[y * n + x] & 1)
-                p.drawRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
-    p.end();
-    QRcode_free(qr);
-    return img;
 }
 
 static QString tgProxyUrl(const QString& host, const QString& port, const QString& secret) {
@@ -732,9 +709,11 @@ void MainWindow::buildUi() {
         c1->addWidget(b3);
 
         m_mtgQr = new QLabel;
-        m_mtgQr->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        m_mtgQr->setObjectName("qr");
+        m_mtgQr->setAlignment(Qt::AlignCenter);
+        m_mtgQr->setStyleSheet("QLabel#qr { background: #ffffff; border: 1px solid #3a3c48; border-radius: 16px; padding: 16px; }");
         m_mtgQr->setVisible(false);
-        c1->addWidget(m_mtgQr);
+        c1->addWidget(m_mtgQr, 0, Qt::AlignHCenter);
 
         // --- Карточка: параметры ---
         auto* c2 = addCard("ПАРАМЕТРЫ");

@@ -17,6 +17,7 @@ add_executable(sni-relay-manager
     src/mainwindow.cpp
     src/generator.cpp
     src/sshutil.cpp
+    src/qr.cpp
 )
 
 target_link_libraries(sni-relay-manager PRIVATE Qt6::Widgets PkgConfig::QRENCODE)

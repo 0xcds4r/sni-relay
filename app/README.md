@@ -69,6 +69,7 @@ sni-relay-manager --print-hosts         # показать новый /etc/hosts
 sni-relay-manager --print-config-path   # путь к config.json
 sni-relay-manager --ssh-test           # проверить SSH-подключение к VDS
 sni-relay-manager --mtg-link           # ссылка t.me/proxy для MTProto
+sni-relay-manager --mtg-qr=qr.png      # сохранить QR (с логотипом) в PNG
 sni-relay-manager --version            # версия
 sni-relay-manager --print-config --host=1.2.3.4
 ```

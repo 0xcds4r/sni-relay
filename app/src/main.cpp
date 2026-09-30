@@ -13,6 +13,7 @@
 #include "generator.h"
 #include "settings.h"
 #include "sshutil.h"
+#include "qr.h"
 #include "version.h"
 
 int main(int argc, char** argv) {
@@ -23,6 +24,22 @@ int main(int argc, char** argv) {
             QCoreApplication app(argc, argv);
             QTextStream out(stdout);
             out << "sni-relay-manager " << SRM_VERSION << "\n";
+            return 0;
+        }
+        if (a.startsWith("--mtg-qr=")) {
+            QApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            const QString effPort = s.mtgVia443 ? QString("443") : s.mtgPort.trimmed();
+            const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3")
+                                   .arg(s.host.trimmed(), effPort, s.mtgSecret.trimmed());
+            const QString path = a.mid(QString("--mtg-qr=").size());
+            const QImage img = makeQrImage(tg, 600);
+            if (img.isNull() || !img.save(path, "PNG")) {
+                QTextStream(stderr) << "не удалось создать QR\n";
+                return 1;
+            }
+            QTextStream(stdout) << path << "\n";
             return 0;
         }
         if (a == "--mtg-link") {
