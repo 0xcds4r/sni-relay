@@ -1264,10 +1264,11 @@ void MainWindow::onMtgShowQr() {
     }
     const QString url = tgProxyUrl(host, port, sec);
     const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3").arg(host, port, sec);
-    m_mtgLink->setText(QString("Ссылка (открой на телефоне): <a href=\"%1\">%1</a><br>tg: <code>%2</code>").arg(url, tg));
-    const QImage img = makeQrImage(url, 300);
+    m_mtgLink->setText(QString("Ссылка (открой на телефоне): <a href=\"%1\">%1</a>").arg(url));
+    // QR кодируем схемой tg:// — сканер сразу открывает приложение Telegram.
+    const QImage img = makeQrImage(tg, 300);
     if (!img.isNull()) m_mtgQr->setPixmap(QPixmap::fromImage(img));
-    logOk("Ссылка и QR готовы");
+    logOk("Ссылка и QR готовы (tg://)");
 }
 
 void MainWindow::onMtgSaveQr() {
