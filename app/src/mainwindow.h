@@ -127,7 +127,6 @@ private:
     QComboBox* m_mtgFront = nullptr;
     QLineEdit* m_mtgSecret = nullptr;
     QCheckBox* m_mtgVia443 = nullptr;
-    QLabel* m_mtgLink = nullptr;
     QLabel* m_mtgQr = nullptr;
     QLabel* m_mtgStatus = nullptr;
     QPushButton* m_mtgInstallBtn = nullptr;

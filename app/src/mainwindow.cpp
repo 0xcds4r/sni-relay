@@ -687,14 +687,6 @@ void MainWindow::buildUi() {
         m_mtgStatus->setWordWrap(true);
         c1->addWidget(m_mtgStatus);
 
-        m_mtgLink = new QLabel;
-        m_mtgLink->setTextFormat(Qt::RichText);
-        m_mtgLink->setOpenExternalLinks(true);
-        m_mtgLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
-        m_mtgLink->setWordWrap(true);
-        m_mtgLink->setVisible(false);
-        c1->addWidget(m_mtgLink);
-
         auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
         auto* qr = new QPushButton("Показать QR");
         qr->setCheckable(true);
@@ -806,11 +798,9 @@ void MainWindow::buildUi() {
         connect(qr, &QPushButton::toggled, this, [this, qr](bool on) {
             if (on) {
                 onMtgShowQr();
-                m_mtgLink->setVisible(true);
                 m_mtgQr->setVisible(true);
                 qr->setText("Скрыть QR");
             } else {
-                m_mtgLink->setVisible(false);
                 m_mtgQr->setVisible(false);
                 qr->setText("Показать QR");
             }
@@ -1275,9 +1265,7 @@ void MainWindow::onMtgShowQr() {
         logErr("Нужны хост VDS, порт и секрет");
         return;
     }
-    const QString url = tgProxyUrl(host, port, sec);
     const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3").arg(host, port, sec);
-    m_mtgLink->setText(QString("Ссылка (открой на телефоне): <a href=\"%1\">%1</a>").arg(url));
     // QR кодируем схемой tg:// — сканер сразу открывает приложение Telegram.
     const QImage img = makeQrImage(tg, 300);
     if (!img.isNull()) m_mtgQr->setPixmap(QPixmap::fromImage(img));
@@ -1285,7 +1273,7 @@ void MainWindow::onMtgShowQr() {
 }
 
 void MainWindow::onMtgSaveQr() {
-    if (m_mtgQr->pixmap().isNull()) { logErr("Сначала «Показать ссылку и QR»"); return; }
+    if (m_mtgQr->pixmap().isNull()) { logErr("Сначала «Показать QR»"); return; }
     const QString f = QFileDialog::getSaveFileName(this, "Сохранить QR", QDir::homePath() + "/telegram-proxy.png", "PNG (*.png)");
     if (f.isEmpty()) return;
     if (m_mtgQr->pixmap().toImage().save(f, "PNG")) logOk("QR сохранён: " + f);
