@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QListWidget>
 #include <QScrollArea>
+#include <QFrame>
 #include <QProgressBar>
 #include <QResizeEvent>
 #include <QDesktopServices>
@@ -517,10 +518,83 @@ void MainWindow::buildUi() {
         scroll->setWidgetResizable(true);
         auto* w = new QWidget;
         auto* lay = new QVBoxLayout(w);
-        lay->setSpacing(8);
+        lay->setContentsMargins(16, 16, 16, 16);
+        lay->setSpacing(14);
 
+        // Стиль в духе Amnezia VPN: тёмные карточки, скругления, синий акцент.
+        w->setStyleSheet(R"QSS(
+            QFrame#card { background: #23242c; border: 1px solid #33353f; border-radius: 14px; }
+            QLabel#cardTitle { color: #9aa0ac; font-weight: 600; letter-spacing: 1px; }
+            QLabel#mtgStatus { color: #e8e8ea; background: #1a1b21; border: 1px solid #33353f; border-radius: 12px; padding: 16px; font-size: 11pt; }
+            QLabel#hint { color: #8b8f99; }
+            QLabel { color: #e8e8ea; }
+            QPushButton { background: #2c2e38; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 9px 16px; }
+            QPushButton:hover { background: #353846; }
+            QPushButton:pressed { background: #292b34; }
+            QPushButton:disabled { color: #6a6d77; background: #24252b; border-color: #2c2e37; }
+            QPushButton#primary { background: #2f6fed; color: #ffffff; border: none; font-weight: 600; }
+            QPushButton#primary:hover { background: #3d7cf0; }
+            QPushButton#primary:disabled { background: #2a3550; color: #8ea0c8; }
+            QPushButton#danger { background: #3a2226; color: #ff9a9a; border: 1px solid #5c3238; }
+            QPushButton#danger:hover { background: #472a2f; }
+            QPushButton#danger:disabled { background: #2a2327; color: #7a6a6c; border-color: #3a3237; }
+            QLineEdit, QSpinBox, QComboBox { background: #1a1b21; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 7px 10px; }
+            QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1px solid #2f6fed; }
+            QComboBox::drop-down { border: none; width: 22px; }
+            QComboBox QAbstractItemView { background: #23242c; color: #e8e8ea; selection-background-color: #2f6fed; border: 1px solid #3a3c48; }
+        )QSS");
+
+        auto addCard = [&](const QString& title) -> QVBoxLayout* {
+            auto* card = new QFrame;
+            card->setObjectName("card");
+            auto* cl = new QVBoxLayout(card);
+            cl->setContentsMargins(16, 14, 16, 16);
+            cl->setSpacing(10);
+            if (!title.isEmpty()) {
+                auto* t = new QLabel(title);
+                t->setObjectName("cardTitle");
+                cl->addWidget(t);
+            }
+            lay->addWidget(card);
+            return cl;
+        };
+
+        // --- Карточка: статус и подключение ---
+        auto* c1 = addCard("СТАТУС И ПОДКЛЮЧЕНИЕ");
+        m_mtgStatus = new QLabel("Нажми «Обновить статус»");
+        m_mtgStatus->setObjectName("mtgStatus");
+        m_mtgStatus->setTextFormat(Qt::RichText);
+        m_mtgStatus->setWordWrap(true);
+        c1->addWidget(m_mtgStatus);
+
+        m_mtgLink = new QLabel;
+        m_mtgLink->setTextFormat(Qt::RichText);
+        m_mtgLink->setOpenExternalLinks(true);
+        m_mtgLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        m_mtgLink->setWordWrap(true);
+        c1->addWidget(m_mtgLink);
+
+        auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
+        auto* qr = new QPushButton("Показать QR");
+        auto* copylink = new QPushButton("Копировать ссылку");
+        copylink->setToolTip("Скопировать ссылку t.me/proxy");
+        auto* addtg = new QPushButton("Добавить в Telegram Desktop");
+        addtg->setObjectName("primary");
+        addtg->setToolTip("Открыть tg://proxy, чтобы Telegram Desktop добавил прокси автоматически");
+        auto* save = new QPushButton("Сохранить QR…");
+        l3->addWidget(qr); l3->addWidget(copylink); l3->addWidget(addtg); l3->addWidget(save); l3->addStretch();
+        c1->addWidget(b3);
+
+        m_mtgQr = new QLabel;
+        m_mtgQr->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        c1->addWidget(m_mtgQr);
+
+        // --- Карточка: параметры ---
+        auto* c2 = addCard("ПАРАМЕТРЫ");
         auto* form = new QFormLayout;
         form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+        form->setHorizontalSpacing(16);
+        form->setVerticalSpacing(10);
 
         m_mtgPort = new QSpinBox;
         m_mtgPort->setRange(1, 65535);
@@ -546,9 +620,9 @@ void MainWindow::buildUi() {
         secLay->addWidget(m_mtgSecret); secLay->addWidget(secShow); secLay->addWidget(secCopy);
 
         form->addRow("Порт прокси", m_mtgPort);
-        form->addRow("Фронт-домен (маскировка)", m_mtgFront);
+        form->addRow("Фронт-домен", m_mtgFront);
         form->addRow("Secret", secRow);
-        lay->addLayout(form);
+        c2->addLayout(form);
 
         connect(secShow, &QPushButton::toggled, this, [this, secShow](bool on) {
             m_mtgSecret->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
@@ -558,19 +632,16 @@ void MainWindow::buildUi() {
             QGuiApplication::clipboard()->setText(m_mtgSecret->text()); logOk("Секрет скопирован");
         });
 
-        m_mtgStatus = new QLabel("Статус: нажми «Обновить статус»");
-        m_mtgStatus->setTextFormat(Qt::RichText);
-        m_mtgStatus->setWordWrap(true);
-        m_mtgStatus->setStyleSheet("QLabel { padding: 6px; background: palette(base); border: 1px solid palette(mid); border-radius: 4px; }");
-        lay->addWidget(m_mtgStatus);
-
+        // --- Карточка: управление сервисом ---
+        auto* c3 = addCard("УПРАВЛЕНИЕ СЕРВИСОМ");
         auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
         m_mtgInstallBtn = new QPushButton("Установить и развернуть");
+        m_mtgInstallBtn->setObjectName("primary");
         m_mtgInstallBtn->setToolTip("Установить/обновить mtg, при необходимости сгенерировать секрет и развернуть сервис");
         m_mtgGenBtn = new QPushButton("Сгенерировать секрет");
         m_mtgGenBtn->setToolTip("Сгенерировать новый FakeTLS-секрет под выбранный фронт-домен");
         l1->addWidget(m_mtgInstallBtn); l1->addWidget(m_mtgGenBtn); l1->addStretch();
-        lay->addWidget(b1);
+        c3->addWidget(b1);
 
         auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
         m_mtgStartBtn = new QPushButton("Старт");
@@ -578,38 +649,19 @@ void MainWindow::buildUi() {
         m_mtgRestartBtn = new QPushButton("Рестарт");
         m_mtgStatusBtn = new QPushButton("Обновить статус");
         m_mtgRemoveBtn = new QPushButton("Удалить mtg и сервис");
+        m_mtgRemoveBtn->setObjectName("danger");
         m_mtgRemoveBtn->setToolTip("Остановить и удалить mtg с VDS: сервис, /etc/mtg.toml и бинарь");
         l2->addWidget(m_mtgStartBtn); l2->addWidget(m_mtgStopBtn);
         l2->addWidget(m_mtgRestartBtn); l2->addWidget(m_mtgStatusBtn);
         l2->addWidget(m_mtgRemoveBtn);
         l2->addStretch();
-        lay->addWidget(b2);
-
-        auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
-        auto* qr = new QPushButton("Показать ссылку и QR");
-        auto* copylink = new QPushButton("Копировать ссылку");
-        copylink->setToolTip("Скопировать ссылку t.me/proxy");
-        auto* addtg = new QPushButton("Добавить в Telegram Desktop");
-        addtg->setToolTip("Открыть tg://proxy, чтобы Telegram Desktop добавил прокси автоматически");
-        auto* save = new QPushButton("Сохранить QR…");
-        l3->addWidget(qr); l3->addWidget(copylink); l3->addWidget(addtg); l3->addWidget(save); l3->addStretch();
-        lay->addWidget(b3);
-
-        m_mtgLink = new QLabel; m_mtgLink->setTextFormat(Qt::RichText);
-        m_mtgLink->setOpenExternalLinks(true);
-        m_mtgLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
-        m_mtgLink->setWordWrap(true);
-        lay->addWidget(m_mtgLink);
-
-        m_mtgQr = new QLabel;
-        m_mtgQr->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-        lay->addWidget(m_mtgQr);
+        c3->addWidget(b2);
 
         auto* hint = new QLabel(
-            "MTProto-прокси для Telegram Desktop/мобильного (SNI-релей их не покрывает — ядро идёт по IP).\n"
-            "Порядок: «Установить mtg на VDS» → «Сгенерировать секрет» → «Развернуть сервис» → «Показать QR».");
+            "MTProto-прокси для Telegram Desktop/мобильного: SNI-релей их не покрывает "
+            "(ядро ходит по IP). «Установить и развернуть» поставит mtg, создаст секрет и поднимет сервис.");
+        hint->setObjectName("hint");
         hint->setWordWrap(true);
-        hint->setStyleSheet("QLabel { color: palette(mid); }");
         lay->addWidget(hint);
         lay->addStretch();
 
