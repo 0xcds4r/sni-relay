@@ -575,8 +575,11 @@ void MainWindow::buildUi() {
         m_mtgStopBtn = new QPushButton("Стоп");
         m_mtgRestartBtn = new QPushButton("Рестарт");
         m_mtgStatusBtn = new QPushButton("Обновить статус");
+        m_mtgRemoveBtn = new QPushButton("Удалить mtg и сервис");
+        m_mtgRemoveBtn->setToolTip("Остановить и удалить mtg с VDS: сервис, /etc/mtg.toml и бинарь");
         l2->addWidget(m_mtgStartBtn); l2->addWidget(m_mtgStopBtn);
         l2->addWidget(m_mtgRestartBtn); l2->addWidget(m_mtgStatusBtn);
+        l2->addWidget(m_mtgRemoveBtn);
         l2->addStretch();
         lay->addWidget(b2);
 
@@ -612,6 +615,7 @@ void MainWindow::buildUi() {
         connect(m_mtgStopBtn, &QPushButton::clicked, this, &MainWindow::onMtgStop);
         connect(m_mtgRestartBtn, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
         connect(m_mtgStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshMtgStatus);
+        connect(m_mtgRemoveBtn, &QPushButton::clicked, this, &MainWindow::onMtgRemove);
         connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
         connect(copylink, &QPushButton::clicked, this, [this] {
@@ -1088,5 +1092,30 @@ void MainWindow::refreshMtgStatus() {
         m_mtgStartBtn->setEnabled(haveUnit && !isActive);
         m_mtgStopBtn->setEnabled(haveUnit && isActive);
         m_mtgRestartBtn->setEnabled(haveUnit);
+        m_mtgRemoveBtn->setEnabled(installed || haveUnit);
+    });
+}
+
+void MainWindow::onMtgRemove() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { logErr("Не задан хост VDS"); return; }
+    if (QMessageBox::question(this, "Удалить mtg",
+            "Удалить MTProto-прокси с VDS?\n\n"
+            "Будет остановлен и отключён сервис, удалены /etc/mtg.toml и /usr/local/bin/mtg.",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+    showBusy("Удаление mtg…");
+    const QString script = R"BASH(systemctl stop mtg 2>/dev/null || true
+systemctl disable mtg 2>/dev/null || true
+rm -f /etc/systemd/system/mtg.service /etc/mtg.toml /usr/local/bin/mtg
+systemctl daemon-reload
+systemctl reset-failed mtg 2>/dev/null || true
+echo MTG_REMOVED
+)BASH";
+    runSsh(script, "Удаление mtg", [this](bool ok, const QString& out) {
+        hideBusy();
+        if (ok && out.contains("MTG_REMOVED")) logOk("mtg и сервис удалены с VDS");
+        else logErr("не удалось удалить mtg");
+        refreshMtgStatus();
     });
 }

@@ -50,6 +50,7 @@ private slots:
     void onMtgInstallDeploy();
     void onMtgGenSecret();
     void onMtgDeploy();
+    void onMtgRemove();
     void onMtgStart();
     void onMtgStop();
     void onMtgRestart();
@@ -126,6 +127,7 @@ private:
     QPushButton* m_mtgStopBtn = nullptr;
     QPushButton* m_mtgRestartBtn = nullptr;
     QPushButton* m_mtgStatusBtn = nullptr;
+    QPushButton* m_mtgRemoveBtn = nullptr;
 
     // check
     QTableWidget* m_checkTable = nullptr;
