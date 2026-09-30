@@ -1,6 +1,8 @@
 package com.hugedev.snirelay.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 enum class TabId(val title: String) {
     VDS("VDS"), DOMAINS("Домены"), RELAY("Релей"), CLIENT("Клиент"),
@@ -36,7 +40,9 @@ enum class TabId(val title: String) {
 
 @Composable
 fun SniRelayApp(state: AppState, onStartVpn: () -> Unit) {
-    var tab by remember { mutableStateOf(TabId.VDS) }
+    val pagerState = rememberPagerState(pageCount = { TabId.entries.size })
+    val scope = rememberCoroutineScope()
+    val tab = TabId.entries[pagerState.currentPage]
     LaunchedEffect(tab) {
         if (tab == TabId.MTPROTO && state.settings.host.isNotBlank()) {
             state.refreshMtgStatus()
@@ -53,13 +59,16 @@ fun SniRelayApp(state: AppState, onStartVpn: () -> Unit) {
                 TabId.entries.forEach { t ->
                     Tab(
                         selected = tab == t,
-                        onClick = { tab = t },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(t.ordinal) } },
                         text = { Text(t.title, color = if (tab == t) Accent else TextDim, fontSize = 13.sp) },
                     )
                 }
             }
-            Box(Modifier.weight(1f)) {
-                when (tab) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { page ->
+                when (TabId.entries[page]) {
                     TabId.VDS -> VdsScreen(state)
                     TabId.DOMAINS -> DomainsScreen(state)
                     TabId.RELAY -> RelayScreen(state)
