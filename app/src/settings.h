@@ -30,6 +30,11 @@ struct Settings {
     QStringList siteDomains;                // SNI локального сайта
     QStringList domains;                    // домены, которые релеим
 
+    // --- MTProto-прокси (mtg) ---
+    QString mtgPort = "10443";
+    QString mtgFront = "www.google.com";
+    QString mtgSecret;
+
     static QString configPath() {
         QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
         if (dir.isEmpty()) dir = QDir::homePath() + "/.config/sni-relay-manager";
@@ -77,6 +82,9 @@ struct Settings {
         s.hasSite = o.value("hasSite").toBool(s.hasSite);
         s.siteDomains = lstr("siteDomains");
         if (o.contains("domains")) s.domains = lstr("domains");
+        s.mtgPort = str("mtgPort", s.mtgPort);
+        s.mtgFront = str("mtgFront", s.mtgFront);
+        s.mtgSecret = str("mtgSecret", s.mtgSecret);
         return s;
     }
 
@@ -95,6 +103,9 @@ struct Settings {
         o["hasSite"] = hasSite;
         o["siteDomains"] = QJsonArray::fromStringList(siteDomains);
         o["domains"] = QJsonArray::fromStringList(domains);
+        o["mtgPort"] = mtgPort;
+        o["mtgFront"] = mtgFront;
+        o["mtgSecret"] = mtgSecret;
         QSaveFile f(configPath());
         if (!f.open(QIODevice::WriteOnly)) return false;
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));

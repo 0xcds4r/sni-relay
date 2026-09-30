@@ -25,6 +25,20 @@ int main(int argc, char** argv) {
             out << "sni-relay-manager " << SRM_VERSION << "\n";
             return 0;
         }
+        if (a == "--mtg-link") {
+            QCoreApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            if (s.host.trimmed().isEmpty() || s.mtgPort.trimmed().isEmpty() || s.mtgSecret.trimmed().isEmpty()) {
+                QTextStream(stderr) << "нет host/mtgPort/mtgSecret в конфиге\n";
+                return 1;
+            }
+            QTextStream out(stdout);
+            out << "https://t.me/proxy?server=" << s.host.trimmed()
+                << "&port=" << s.mtgPort.trimmed()
+                << "&secret=" << s.mtgSecret.trimmed() << "\n";
+            return 0;
+        }
         if (a == "--print-config-path") {
             QCoreApplication app(argc, argv);
             QCoreApplication::setApplicationName("sni-relay-manager");

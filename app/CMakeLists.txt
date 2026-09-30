@@ -8,6 +8,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(QRENCODE REQUIRED IMPORTED_TARGET libqrencode)
 
 add_executable(sni-relay-manager
     resources.qrc
@@ -17,6 +19,6 @@ add_executable(sni-relay-manager
     src/sshutil.cpp
 )
 
-target_link_libraries(sni-relay-manager PRIVATE Qt6::Widgets)
+target_link_libraries(sni-relay-manager PRIVATE Qt6::Widgets PkgConfig::QRENCODE)
 
 install(TARGETS sni-relay-manager RUNTIME DESTINATION bin)

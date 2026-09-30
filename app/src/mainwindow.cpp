@@ -25,7 +25,13 @@
 #include <QMessageBox>
 #include <QColor>
 #include <QCoreApplication>
+#include <QImage>
+#include <QPixmap>
+#include <QPainter>
+#include <QClipboard>
 #include <QSplitter>
+
+#include <qrencode.h>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -38,6 +44,34 @@
 // ---------- вспомогательные ----------
 
 static QString trim(const QString& s) { return s.trimmed(); }
+
+// QR-код из текста (libqrencode) → QImage.
+static QImage makeQrImage(const QString& text, int target = 300) {
+    const QByteArray data = text.toUtf8();
+    QRcode* qr = QRcode_encodeString(data.constData(), 0, QR_ECLEVEL_M, QR_MODE_8, 1);
+    if (!qr) return QImage();
+    const int n = qr->width;
+    const int quiet = 4;
+    int scale = target / (n + 2 * quiet);
+    if (scale < 2) scale = 2;
+    const int dim = (n + 2 * quiet) * scale;
+    QImage img(dim, dim, QImage::Format_RGB32);
+    img.fill(Qt::white);
+    QPainter p(&img);
+    p.setPen(Qt::NoPen);
+    p.setBrush(Qt::black);
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            if (qr->data[y * n + x] & 1)
+                p.drawRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+    p.end();
+    QRcode_free(qr);
+    return img;
+}
+
+static QString tgProxyUrl(const QString& host, const QString& port, const QString& secret) {
+    return QString("https://t.me/proxy?server=%1&port=%2&secret=%3").arg(host, port, secret);
+}
 
 void MainWindow::log(const QString& s) {
     if (!m_log) return;
@@ -386,6 +420,70 @@ void MainWindow::buildUi() {
         tabs->addTab(w, "FAQ");
     }
 
+    // ===== MTProto =====
+    {
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+
+        auto* form = new QFormLayout;
+        m_mtgPort = new QLineEdit; m_mtgPort->setFixedWidth(120);
+        m_mtgFront = new QLineEdit;
+        m_mtgSecret = new QLineEdit; m_mtgSecret->setPlaceholderText("сгенерировать / вставить…");
+        form->addRow("Порт прокси", m_mtgPort);
+        form->addRow("Фронт-домен (маскировка)", m_mtgFront);
+        form->addRow("Secret", m_mtgSecret);
+        lay->addLayout(form);
+
+        auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
+        auto* inst = new QPushButton("Установить mtg на VDS");
+        auto* gen = new QPushButton("Сгенерировать секрет");
+        l1->addWidget(inst); l1->addWidget(gen); l1->addStretch();
+        lay->addWidget(b1);
+
+        auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
+        auto* dep = new QPushButton("Развернуть/обновить сервис");
+        auto* st = new QPushButton("Старт"); auto* sp = new QPushButton("Стоп");
+        auto* rs = new QPushButton("Рестарт"); auto* stat = new QPushButton("Статус");
+        l2->addWidget(dep); l2->addWidget(st); l2->addWidget(sp); l2->addWidget(rs); l2->addWidget(stat);
+        l2->addStretch();
+        lay->addWidget(b2);
+
+        auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
+        auto* qr = new QPushButton("Показать ссылку и QR");
+        auto* save = new QPushButton("Сохранить QR…");
+        l3->addWidget(qr); l3->addWidget(save); l3->addStretch();
+        lay->addWidget(b3);
+
+        m_mtgLink = new QLabel; m_mtgLink->setTextFormat(Qt::RichText);
+        m_mtgLink->setOpenExternalLinks(true);
+        m_mtgLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        m_mtgLink->setWordWrap(true);
+        lay->addWidget(m_mtgLink);
+
+        m_mtgQr = new QLabel;
+        m_mtgQr->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        lay->addWidget(m_mtgQr);
+
+        auto* hint = new QLabel(
+            "MTProto-прокси для Telegram Desktop/мобильного (SNI-релей их не покрывает — ядро идёт по IP).\n"
+            "Порядок: «Установить mtg на VDS» → «Сгенерировать секрет» → «Развернуть сервис» → «Показать QR».");
+        hint->setWordWrap(true);
+        lay->addWidget(hint);
+        lay->addStretch();
+
+        connect(inst, &QPushButton::clicked, this, &MainWindow::onMtgInstall);
+        connect(gen, &QPushButton::clicked, this, &MainWindow::onMtgGenSecret);
+        connect(dep, &QPushButton::clicked, this, &MainWindow::onMtgDeploy);
+        connect(st, &QPushButton::clicked, this, &MainWindow::onMtgStart);
+        connect(sp, &QPushButton::clicked, this, &MainWindow::onMtgStop);
+        connect(rs, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
+        connect(stat, &QPushButton::clicked, this, &MainWindow::onMtgStatus);
+        connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
+        connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
+
+        tabs->addTab(w, "MTProto");
+    }
+
     split->addWidget(tabs);
 
     // ===== Лог =====
@@ -423,6 +521,9 @@ void MainWindow::toWidgets() {
     m_relayExit->setText(m_set.relayExit);
     m_domains->clear(); for (const auto& d : m_set.domains) m_domains->addItem(d);
     m_siteDomains->clear(); for (const auto& d : m_set.siteDomains) m_siteDomains->addItem(d);
+    m_mtgPort->setText(m_set.mtgPort);
+    m_mtgFront->setText(m_set.mtgFront);
+    m_mtgSecret->setText(m_set.mtgSecret);
 }
 
 void MainWindow::fromWidgets() {
@@ -438,6 +539,9 @@ void MainWindow::fromWidgets() {
     m_set.relayExit = trim(m_relayExit->text());
     m_set.domains.clear(); for (int i = 0; i < m_domains->count(); ++i) m_set.domains << m_domains->item(i)->text().trimmed();
     m_set.siteDomains.clear(); for (int i = 0; i < m_siteDomains->count(); ++i) m_set.siteDomains << m_siteDomains->item(i)->text().trimmed();
+    m_set.mtgPort = trim(m_mtgPort->text());
+    m_set.mtgFront = trim(m_mtgFront->text());
+    m_set.mtgSecret = trim(m_mtgSecret->text());
     m_set.save();
 }
 
@@ -633,4 +737,119 @@ void MainWindow::checkNext() {
             setCheckRow(row, d, http, status, details);
             checkNext();
         }, false);
+}
+
+// ---------- MTProto (mtg) ----------
+
+void MainWindow::onMtgInstall() {
+    fromWidgets();
+    const QString script = R"BASH(set -e
+case "$(uname -m)" in x86_64) A=amd64;; aarch64) A=arm64;; *) A=amd64;; esac
+VER=$(curl -s --max-time 20 https://api.github.com/repos/9seconds/mtg/releases/latest | grep -oE '"tag_name": *"v[0-9.]+"' | grep -oE 'v[0-9.]+')
+[ -n "$VER" ] || { echo NO_VER; exit 1; }
+echo "mtg $VER ($A)"
+cd /tmp
+curl -sSL --max-time 120 -o mtg.tar.gz "https://github.com/9seconds/mtg/releases/download/$VER/mtg-${VER#v}-linux-$A.tar.gz"
+D="mtg-${VER#v}-linux-$A"
+tar xzf mtg.tar.gz
+install -m755 "$D/mtg" /usr/local/bin/mtg
+rm -rf mtg.tar.gz "$D"
+/usr/local/bin/mtg --version
+echo MTG_INSTALLED
+)BASH";
+    runSsh(script, "Установка mtg на VDS");
+}
+
+void MainWindow::onMtgGenSecret() {
+    fromWidgets();
+    const QString front = m_set.mtgFront.trimmed().isEmpty() ? QString("www.google.com") : m_set.mtgFront.trimmed();
+    const QString script = QString("set -e\ncommand -v mtg >/dev/null || { echo NO_MTG; exit 1; }\nmtg generate-secret %1\n").arg(qshell(front));
+    runSsh(script, "Генерация секрета mtg", [this](bool ok, const QString& out) {
+        if (!ok) { logErr("не удалось сгенерировать секрет (mtg установлен?)"); return; }
+        QString sec;
+        for (const QString& l : out.split('\n', Qt::SkipEmptyParts)) {
+            const QString t = l.trimmed();
+            if (!t.contains(' ') && t.size() >= 20 && !t.startsWith("->") && !t.startsWith("set "))
+                sec = t;
+        }
+        if (sec.isEmpty()) { logErr("секрет не распознан"); return; }
+        m_mtgSecret->setText(sec);
+        fromWidgets();
+        logOk("Секрет получен и сохранён в конфиг");
+    });
+}
+
+void MainWindow::onMtgDeploy() {
+    fromWidgets();
+    if (m_set.mtgSecret.trimmed().isEmpty()) { logErr("Сначала сгенерируй секрет"); return; }
+    const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+    const QString ip = m_set.host.trimmed();
+    const bool ip4 = QRegularExpression("^[0-9.]+$").match(ip).hasMatch();
+
+    QString toml;
+    toml += "secret = \"" + m_set.mtgSecret.trimmed() + "\"\n";
+    toml += "bind-to = \"0.0.0.0:" + port + "\"\n";
+    toml += "concurrency = 8192\n";
+    toml += "prefer-ip = \"prefer-ipv4\"\n";
+    if (ip4) toml += "public-ipv4 = \"" + ip + "\"\n";
+    toml += "tolerate-time-skewness = \"30s\"\n";
+
+    const QString unit =
+        "[Unit]\nDescription=mtg MTProto proxy\nAfter=network-online.target\nWants=network-online.target\n\n"
+        "[Service]\nExecStart=/usr/local/bin/mtg run /etc/mtg.toml\nRestart=always\nRestartSec=3\n"
+        "LimitNOFILE=65536\nNoNewPrivileges=true\n\n[Install]\nWantedBy=multi-user.target\n";
+
+    QString script;
+    script += "set -e\ncommand -v mtg >/dev/null || { echo NO_MTG; exit 1; }\n";
+    script += "cat > /etc/mtg.toml <<'EOF_TOML'\n" + toml + "EOF_TOML\n";
+    script += "chmod 600 /etc/mtg.toml\n";
+    script += "cat > /etc/systemd/system/mtg.service <<'EOF_UNIT'\n" + unit + "EOF_UNIT\n";
+    script += "systemctl daemon-reload\n";
+    script += "systemctl enable mtg >/dev/null 2>&1 || true\n";
+    script += "systemctl restart mtg\n";
+    script += "sleep 1\n";
+    script += "systemctl is-active mtg\n";
+    script += "ss -tlnp | grep ':" + port + "' || true\n";
+    script += "echo MTG_DEPLOYED\n";
+    runSsh(script, "Развёртывание mtg на VDS", [this](bool ok, const QString& out) {
+        if (ok && out.contains("MTG_DEPLOYED")) logOk("MTProto-прокси развёрнут");
+        else logErr("Развёртывание mtg не удалось");
+    });
+}
+
+void MainWindow::onMtgStart()    { fromWidgets(); runSsh("systemctl start mtg && systemctl is-active mtg", "Старт mtg"); }
+void MainWindow::onMtgStop()     { fromWidgets(); runSsh("systemctl stop mtg && systemctl is-active mtg || true", "Стоп mtg"); }
+void MainWindow::onMtgRestart()  { fromWidgets(); runSsh("systemctl restart mtg && systemctl is-active mtg", "Рестарт mtg"); }
+void MainWindow::onMtgStatus() {
+    fromWidgets();
+    const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+    const QString script = "systemctl is-active mtg 2>/dev/null || echo inactive\n"
+                           "systemctl status mtg --no-pager 2>/dev/null | head -12\n"
+                           "ss -tlnp | grep ':" + port + "' || echo 'порт не слушается'\n";
+    runSsh(script, "Статус mtg");
+}
+
+void MainWindow::onMtgShowQr() {
+    fromWidgets();
+    const QString host = m_set.host.trimmed();
+    const QString port = m_set.mtgPort.trimmed();
+    const QString sec = m_set.mtgSecret.trimmed();
+    if (host.isEmpty() || port.isEmpty() || sec.isEmpty()) {
+        logErr("Нужны хост VDS, порт и секрет");
+        return;
+    }
+    const QString url = tgProxyUrl(host, port, sec);
+    const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3").arg(host, port, sec);
+    m_mtgLink->setText(QString("Ссылка (открой на телефоне): <a href=\"%1\">%1</a><br>tg: <code>%2</code>").arg(url, tg));
+    const QImage img = makeQrImage(url, 300);
+    if (!img.isNull()) m_mtgQr->setPixmap(QPixmap::fromImage(img));
+    logOk("Ссылка и QR готовы");
+}
+
+void MainWindow::onMtgSaveQr() {
+    if (m_mtgQr->pixmap().isNull()) { logErr("Сначала «Показать ссылку и QR»"); return; }
+    const QString f = QFileDialog::getSaveFileName(this, "Сохранить QR", QDir::homePath() + "/telegram-proxy.png", "PNG (*.png)");
+    if (f.isEmpty()) return;
+    if (m_mtgQr->pixmap().toImage().save(f, "PNG")) logOk("QR сохранён: " + f);
+    else logErr("не удалось сохранить QR");
 }

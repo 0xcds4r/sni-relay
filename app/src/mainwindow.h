@@ -41,6 +41,17 @@ private slots:
     void removeSiteDomain();
     void browseKey();
 
+    // MTProto
+    void onMtgInstall();
+    void onMtgGenSecret();
+    void onMtgDeploy();
+    void onMtgStart();
+    void onMtgStop();
+    void onMtgRestart();
+    void onMtgStatus();
+    void onMtgShowQr();
+    void onMtgSaveQr();
+
 private:
     void buildUi();
     void toWidgets();
@@ -91,6 +102,13 @@ private:
     QLineEdit* m_siteBackend = nullptr;
     QListWidget* m_siteDomains = nullptr;
     QListWidget* m_domains = nullptr;
+
+    // MTProto
+    QLineEdit* m_mtgPort = nullptr;
+    QLineEdit* m_mtgFront = nullptr;
+    QLineEdit* m_mtgSecret = nullptr;
+    QLabel* m_mtgLink = nullptr;
+    QLabel* m_mtgQr = nullptr;
 
     // check
     QTableWidget* m_checkTable = nullptr;

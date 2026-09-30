@@ -18,6 +18,9 @@ GUI-приложение на C++/Qt6 для управления своим SNI
   systemd-run/pkexec/sudo), показать текущие записи.
 - **Проверка** — прогон всех доменов через релей с цветной таблицей:
   `OK` / `challenge` / `REGION BLOCK` / `нет ответа`.
+- **MTProto** — установка `mtg` на VDS, генерация секрета, systemd-сервис,
+  старт/стоп/рестарт/статус, ссылка `t.me/proxy` и **QR-код** для Telegram.
+- **О программе / FAQ** — версия, автор, ссылки и разбор частых проблем.
 - **Лог** — весь вывод выполняемых команд.
 
 Пароли и настройки хранятся в `~/.config/sni-relay-manager/config.json`;
@@ -33,6 +36,7 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 ## Зависимости (для сборки из исходников)
 
 - Qt6 (Widgets), CMake ≥ 3.16, компилятор C++17, Ninja/Make
+- `libqrencode` (для QR во вкладке MTProto) + `pkg-config`
 - Системные утилиты: `ssh`, `curl`, `setsid`; для прав root —
   `systemd-run` / `pkexec` / `sudo`
 
@@ -64,6 +68,7 @@ sni-relay-manager --print-rollback      # показать скрипт отка
 sni-relay-manager --print-hosts         # показать новый /etc/hosts
 sni-relay-manager --print-config-path   # путь к config.json
 sni-relay-manager --ssh-test           # проверить SSH-подключение к VDS
+sni-relay-manager --mtg-link           # ссылка t.me/proxy для MTProto
 sni-relay-manager --version            # версия
 sni-relay-manager --print-config --host=1.2.3.4
 ```
