@@ -110,6 +110,7 @@ private:
     QCheckBox* m_usePassword = nullptr;
     QLineEdit* m_password = nullptr;
     QCheckBox* m_savePassword = nullptr;
+    QLabel* m_vdsStatus = nullptr;
 
     // relay settings
     QLineEdit* m_relayExit = nullptr;

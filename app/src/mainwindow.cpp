@@ -89,7 +89,7 @@ static QString appStyleSheet() {
         QWidget { color: #e8e8ea; }
         QFrame#card { background: #23242c; border: 1px solid #33353f; border-radius: 14px; }
         QLabel#cardTitle { color: #9aa0ac; font-weight: 600; letter-spacing: 1px; }
-        QLabel#mtgStatus { color: #e8e8ea; background: #1a1b21; border: 1px solid #33353f; border-radius: 12px; padding: 16px; font-size: 11pt; }
+        QLabel#mtgStatus, QLabel#statusBox { color: #e8e8ea; background: #1a1b21; border: 1px solid #33353f; border-radius: 12px; padding: 14px; font-size: 11pt; }
         QLabel#hint { color: #8b8f99; }
         QPushButton { background: #2c2e38; color: #e8e8ea; border: 1px solid #3a3c48; border-radius: 10px; padding: 8px 14px; }
         QPushButton:hover { background: #353846; }
@@ -382,7 +382,17 @@ void MainWindow::buildUi() {
     // ===== VDS =====
     {
         auto* w = new QWidget;
-        auto* form = new QFormLayout(w);
+        auto* vlay = new QVBoxLayout(w);
+        vlay->setContentsMargins(0, 0, 0, 0);
+        vlay->setSpacing(12);
+
+        m_vdsStatus = new QLabel("Подключение: не проверялось");
+        m_vdsStatus->setObjectName("statusBox");
+        m_vdsStatus->setTextFormat(Qt::RichText);
+        m_vdsStatus->setWordWrap(true);
+        vlay->addWidget(m_vdsStatus);
+
+        auto* form = new QFormLayout;
         form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
         m_host = new QLineEdit;
@@ -425,6 +435,9 @@ void MainWindow::buildUi() {
         connect(test, &QPushButton::clicked, this, &MainWindow::onTestConnection);
         connect(m_usePassword, &QCheckBox::toggled, m_password, &QLineEdit::setEnabled);
         connect(m_browseKey, &QPushButton::clicked, this, &MainWindow::browseKey);
+
+        vlay->addLayout(form);
+        vlay->addStretch();
 
         tabs->addTab(cardify(w, "VDS"), "VDS");
     }
@@ -871,15 +884,45 @@ void MainWindow::browseKey() {
 }
 
 void MainWindow::onTestConnection() {
-    QString script =
-        "echo '== host =='; hostname; . /etc/os-release 2>/dev/null; echo \"$PRETTY_NAME\"\n"
-        "echo '== geo =='; curl -s --max-time 8 https://ipinfo.io/json 2>/dev/null; echo\n"
-        "echo '== nginx =='; nginx -v 2>&1\n"
-        "ls /etc/nginx/modules-enabled 2>/dev/null | grep -q stream && echo 'stream module: yes' || echo 'stream module: NO'\n"
-        "echo '== claude с VDS =='; curl -sI --max-time 10 https://claude.ai/ 2>/dev/null | grep -iE '^HTTP|^location|cf-mitigated'\n"
-        "echo '== listening =='; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\\b' || true\n";
+    const QString script = QString::fromUtf8(R"BASH(echo "S_HOST=$(hostname)"
+. /etc/os-release 2>/dev/null; echo "S_OS=$PRETTY_NAME"
+echo "S_GEO=$(curl -s --max-time 8 https://ipinfo.io/country 2>/dev/null)"
+echo "S_NGINX=$(nginx -v 2>&1 | head -1)"
+ls /etc/nginx/modules-enabled 2>/dev/null | grep -q stream && echo S_STREAM=yes || echo S_STREAM=no
+echo "S_CLAUDE=$(curl -sI --max-time 10 https://claude.ai/ 2>/dev/null | grep -iE '^HTTP|cf-mitigated' | tr '\n' ' ')"
+echo "== listening =="; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\b' || true
+)BASH");
     showBusy("Проверка подключения к VDS…");
-    runSsh(script, "Проверка подключения к VDS", [this](bool, const QString&) { hideBusy(); });
+    runSsh(script, "Проверка подключения к VDS", [this](bool ok, const QString& out) {
+        hideBusy();
+        QString sHost, sOs, sGeo, sNginx, sStream, sClaude;
+        for (const QString& l : out.split('\n')) {
+            const QString t = l.trimmed();
+            if (t.startsWith("S_HOST=")) sHost = t.mid(7);
+            else if (t.startsWith("S_OS=")) sOs = t.mid(5);
+            else if (t.startsWith("S_GEO=")) sGeo = t.mid(6);
+            else if (t.startsWith("S_NGINX=")) sNginx = t.mid(8);
+            else if (t.startsWith("S_STREAM=")) sStream = t.mid(9);
+            else if (t.startsWith("S_CLAUDE=")) sClaude = t.mid(9);
+        }
+        if (!ok) {
+            m_vdsStatus->setText("<b>Подключение:</b> <span style='color:#ff8f8f'>ошибка</span> — SSH недоступен");
+            logErr("проверка подключения не удалась");
+            return;
+        }
+        QString nginx = sNginx;
+        { QRegularExpression re("nginx/[0-9.]+"); auto m = re.match(sNginx); if (m.hasMatch()) nginx = m.captured(0); }
+        const bool okStream = (sStream == "yes");
+        QString html = "<b>Подключение:</b> <span style='color:#59d17a'>OK</span>"
+                       " · <b>хост:</b> " + sHost.toHtmlEscaped() +
+                       " · <b>OS:</b> " + sOs.toHtmlEscaped() +
+                       " · <b>geo:</b> " + sGeo.toHtmlEscaped() +
+                       " · <b>nginx:</b> " + nginx.toHtmlEscaped() +
+                       " · <b>stream:</b> " + (okStream ? QString("<span style='color:#59d17a'>да</span>")
+                                                          : QString("<span style='color:#ff8f8f'>НЕТ</span>"));
+        if (!sClaude.isEmpty()) html += "<br><b>claude с VDS:</b> " + sClaude.toHtmlEscaped();
+        m_vdsStatus->setText(html);
+    });
 }
 
 // ---------- слоты: домены ----------
