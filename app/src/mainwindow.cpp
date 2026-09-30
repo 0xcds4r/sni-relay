@@ -889,13 +889,12 @@ void MainWindow::onTestConnection() {
 echo "S_GEO=$(curl -s --max-time 8 https://ipinfo.io/country 2>/dev/null)"
 echo "S_NGINX=$(nginx -v 2>&1 | head -1)"
 ls /etc/nginx/modules-enabled 2>/dev/null | grep -q stream && echo S_STREAM=yes || echo S_STREAM=no
-echo "S_CLAUDE=$(curl -sI --max-time 10 https://claude.ai/ 2>/dev/null | grep -iE '^HTTP|cf-mitigated' | tr '\n' ' ')"
 echo "== listening =="; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\b' || true
 )BASH");
     showBusy("Проверка подключения к VDS…");
     runSsh(script, "Проверка подключения к VDS", [this](bool ok, const QString& out) {
         hideBusy();
-        QString sHost, sOs, sGeo, sNginx, sStream, sClaude;
+        QString sHost, sOs, sGeo, sNginx, sStream;
         for (const QString& l : out.split('\n')) {
             const QString t = l.trimmed();
             if (t.startsWith("S_HOST=")) sHost = t.mid(7);
@@ -903,7 +902,6 @@ echo "== listening =="; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\b' || t
             else if (t.startsWith("S_GEO=")) sGeo = t.mid(6);
             else if (t.startsWith("S_NGINX=")) sNginx = t.mid(8);
             else if (t.startsWith("S_STREAM=")) sStream = t.mid(9);
-            else if (t.startsWith("S_CLAUDE=")) sClaude = t.mid(9);
         }
         if (!ok) {
             m_vdsStatus->setText("<b>Подключение:</b> <span style='color:#ff8f8f'>ошибка</span> — SSH недоступен");
@@ -920,21 +918,6 @@ echo "== listening =="; ss -tlnp 2>/dev/null | grep -E ':(443|8443|9443)\b' || t
                        " · <b>nginx:</b> " + nginx.toHtmlEscaped() +
                        " · <b>stream:</b> " + (okStream ? QString("<span style='color:#59d17a'>да</span>")
                                                           : QString("<span style='color:#ff8f8f'>НЕТ</span>"));
-        QString claudeStatus = "нет ответа";
-        if (!sClaude.isEmpty()) {
-            if (sClaude.contains("cf-mitigated"))
-                claudeStatus = "<span style='color:#e0a030'>challenge (Cloudflare)</span>";
-            else {
-                QRegularExpression cre("HTTP/[0-9.]+ ([0-9]{3})");
-                auto cm = cre.match(sClaude);
-                const QString code = cm.hasMatch() ? cm.captured(1) : QString();
-                if (!code.isEmpty() && (code.startsWith('2') || code.startsWith('3')))
-                    claudeStatus = "<span style='color:#59d17a'>доступен (" + code + ")</span>";
-                else if (!code.isEmpty())
-                    claudeStatus = "HTTP " + code;
-            }
-        }
-        html += "<br><b>claude с VDS:</b> " + claudeStatus;
         m_vdsStatus->setText(html);
     });
 }
