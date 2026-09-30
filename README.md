@@ -32,7 +32,7 @@
 
 | Путь | Назначение |
 |---|---|
-| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6): VDS, домены, релей, hosts, проверка |
+| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6): VDS, домены, релей, hosts, проверка, **MTProto**, интеграции |
 | [`setup-vds.sh`](setup-vds.sh) | Автонастройка VDS: бэкап, конфиги, перенос сайта, `nginx -t`, reload (с откатом) |
 | [`client-hosts.sh`](client-hosts.sh) | Прописать/убрать домены в `/etc/hosts` на клиенте |
 | [`relay.conf.example`](relay.conf.example) | Шаблон `stream`-конфига релея |
@@ -59,15 +59,20 @@ cmake --build build
 ./build/sni-relay-manager
 ```
 
-В окне:
+Вкладки приложения: **VDS · Домены · Релей · Клиент · Проверка · MTProto ·
+Интеграции · FAQ · О программе**.
+
 1. Вкладка **VDS** — адрес VDS, пользователь, ключ/пароль → «Проверить подключение».
 2. Вкладка **Релей** — «Развернуть / обновить».
 3. Вкладка **Клиент** — «Прописать домены в /etc/hosts».
-4. Выключи **Secure DNS (DoH)** в браузере.
-5. Вкладка **Проверка** — «Проверить все домены».
+4. Вкладка **MTProto** — для Telegram-приложения: «Установить и развернуть» (прокси на 443 через релей), ссылка и QR.
+5. Вкладка **Интеграции** — отключить AsyncDns в Chrome, пересечения с zapret, порты.
+6. Выключи **Secure DNS (DoH)** в браузере.
+7. Вкладка **Проверка** — «Проверить все домены».
 
 CLI без GUI: `--print-config`, `--print-deploy`, `--print-rollback`,
-`--print-hosts`, `--ssh-test`, `--print-config-path`.
+`--print-hosts`, `--ssh-test`, `--print-config-path`, `--mtg-link`,
+`--mtg-qr=PATH`, `--version`.
 
 ### Вариант B — скрипты (без GUI)
 

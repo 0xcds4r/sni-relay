@@ -16,11 +16,17 @@ GUI-приложение на C++/Qt6 для управления своим SNI
   на 8443, `nginx -t`, reload, автооткат при ошибке) и «Откатить».
 - **Клиент** — прописать/убрать домены в `/etc/hosts` (через
   systemd-run/pkexec/sudo), показать текущие записи.
-- **Проверка** — прогон всех доменов через релей с цветной таблицей:
-  `OK` / `challenge` / `REGION BLOCK` / `нет ответа`.
+- **Проверка** — параллельный (пул) прогон всех доменов через релей с цветной
+  таблицей: `OK` / `challenge` / `REGION BLOCK` / `нет ответа`.
 - **MTProto** — установка `mtg` на VDS, генерация секрета, systemd-сервис,
-  старт/стоп/рестарт/статус, ссылка `t.me/proxy` и **QR-код** для Telegram.
-- **О программе / FAQ** — версия, автор, ссылки и разбор частых проблем.
+  старт/стоп/рестарт/статус/удаление, вывод прокси на **443 через релей**
+  (SNI фронт-домена), ссылка `t.me/proxy`, **QR с логотипом** и
+  «Добавить в Telegram Desktop».
+- **Интеграции** — проверка/включение `--disable-features=AsyncDns` для
+  Chrome/Chromium, пересечение доменов с zapret-списками, занятые/свободные
+  порты на VDS.
+- **FAQ / О программе** — разбор частых проблем, версия, автор, ссылки.
+- **Загрузочный экран** — оверлей на время длительных операций.
 - **Лог** — весь вывод выполняемых команд.
 
 Пароли и настройки хранятся в `~/.config/sni-relay-manager/config.json`;
@@ -40,8 +46,8 @@ GUI-приложение на C++/Qt6 для управления своим SNI
 - Системные утилиты: `ssh`, `curl`, `setsid`; для прав root —
   `systemd-run` / `pkexec` / `sudo`
 
-Arch/CachyOS: `sudo pacman -S qt6-base cmake ninja gcc`
-Ubuntu/Debian: `sudo apt install qt6-base-dev cmake ninja-build g++`
+Arch/CachyOS: `sudo pacman -S qt6-base qt6-svg libqrencode cmake ninja gcc pkgconf`
+Ubuntu/Debian: `sudo apt install qt6-base-dev qt6-svg-dev libqrencode-dev cmake ninja-build g++ pkg-config`
 
 ## Сборка и запуск
 
@@ -67,10 +73,10 @@ sni-relay-manager --print-deploy        # показать скрипт разв
 sni-relay-manager --print-rollback      # показать скрипт отката
 sni-relay-manager --print-hosts         # показать новый /etc/hosts
 sni-relay-manager --print-config-path   # путь к config.json
-sni-relay-manager --ssh-test           # проверить SSH-подключение к VDS
-sni-relay-manager --mtg-link           # ссылка t.me/proxy для MTProto
-sni-relay-manager --mtg-qr=qr.png      # сохранить QR (с логотипом) в PNG
-sni-relay-manager --version            # версия
+sni-relay-manager --ssh-test            # проверить SSH-подключение к VDS
+sni-relay-manager --mtg-link            # ссылка t.me/proxy для MTProto
+sni-relay-manager --mtg-qr=qr.png       # сохранить QR (с логотипом) в PNG
+sni-relay-manager --version             # версия
 sni-relay-manager --print-config --host=1.2.3.4
 ```
 
@@ -89,11 +95,15 @@ sni-relay-manager --print-config --host=1.2.3.4
 src/settings.h        настройки + JSON-персистенция
 src/generator.{h,cpp} генерация relay.conf / скриптов / hosts (чистые функции)
 src/sshutil.{h,cpp}   запуск ssh (askpass для пароля, базовые аргументы)
+src/qr.{h,cpp}        QR-код (libqrencode) с логотипом приложения
 src/mainwindow.{h,cpp} UI и запуск процессов (ssh, curl, elevation)
 src/main.cpp          точка входа + CLI-режимы
 assets/               иконки (.svg, png/), .desktop
 resources.qrc         иконка, зашитая в бинарь
 ```
+
+Порядок вкладок: VDS · Домены · Релей · Клиент · Проверка · MTProto ·
+Интеграции · FAQ · О программе.
 
 ## Ограничения
 
