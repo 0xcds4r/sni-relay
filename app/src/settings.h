@@ -34,6 +34,8 @@ struct Settings {
     QString mtgPort = "10443";
     QString mtgFront = "www.google.com";
     QString mtgSecret;
+    bool mtgVia443 = true;              // слушать mtg на 443 через релей (SNI фронт-домена)
+    QString mtgLocalPort = "9999";      // loopback-порт mtg, когда via443
 
     static QString configPath() {
         QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
@@ -85,6 +87,8 @@ struct Settings {
         s.mtgPort = str("mtgPort", s.mtgPort);
         s.mtgFront = str("mtgFront", s.mtgFront);
         s.mtgSecret = str("mtgSecret", s.mtgSecret);
+        s.mtgVia443 = o.value("mtgVia443").toBool(s.mtgVia443);
+        s.mtgLocalPort = str("mtgLocalPort", s.mtgLocalPort);
         return s;
     }
 
@@ -106,6 +110,8 @@ struct Settings {
         o["mtgPort"] = mtgPort;
         o["mtgFront"] = mtgFront;
         o["mtgSecret"] = mtgSecret;
+        o["mtgVia443"] = mtgVia443;
+        o["mtgLocalPort"] = mtgLocalPort;
         QSaveFile f(configPath());
         if (!f.open(QIODevice::WriteOnly)) return false;
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));

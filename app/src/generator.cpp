@@ -22,6 +22,10 @@ QString relayConf(const Settings& s) {
         if (t.isEmpty() || t.startsWith('#')) continue;
         l << QString("        %1 %2;").arg(t, s.siteBackend);
     }
+    if (s.mtgVia443 && !s.mtgFront.trimmed().isEmpty()) {
+        const QString lp = s.mtgLocalPort.trimmed().isEmpty() ? QString("9999") : s.mtgLocalPort.trimmed();
+        l << QString("        %1 127.0.0.1:%2;   # MTProto (mtg)").arg(s.mtgFront.trimmed(), lp);
+    }
     l << QString("        default %1;").arg(s.hasSite ? s.siteBackend : QString("127.0.0.1:1"));
     l << "    }";
     l << "";

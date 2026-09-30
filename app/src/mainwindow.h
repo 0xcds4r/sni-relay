@@ -93,6 +93,9 @@ private:
     // --- окно с текстом (просмотр конфига и т.п.) ---
     void showTextDialog(const QString& title, const QString& content);
 
+    // эффективный порт прокси для клиента (443 при выводе через релей)
+    QString mtgEffPort() const;
+
     // --- утилиты ---
     void log(const QString& s);
     void logOk(const QString& s);
@@ -123,6 +126,7 @@ private:
     QSpinBox* m_mtgPort = nullptr;
     QComboBox* m_mtgFront = nullptr;
     QLineEdit* m_mtgSecret = nullptr;
+    QCheckBox* m_mtgVia443 = nullptr;
     QLabel* m_mtgLink = nullptr;
     QLabel* m_mtgQr = nullptr;
     QLabel* m_mtgStatus = nullptr;

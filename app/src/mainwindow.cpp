@@ -351,6 +351,11 @@ QString MainWindow::buildHosts(bool addRelay) const {
     return gen::hostsFile(m_set, addRelay, current);
 }
 
+QString MainWindow::mtgEffPort() const {
+    if (m_set.mtgVia443) return QString("443");
+    return m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+}
+
 // ---------- UI ----------
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -748,6 +753,11 @@ void MainWindow::buildUi() {
         secCopy->setToolTip("Скопировать секрет в буфер обмена");
         secLay->addWidget(m_mtgSecret); secLay->addWidget(secShow); secLay->addWidget(secCopy);
 
+        m_mtgVia443 = new QCheckBox("Слушать на 443 через релей (рекомендуется)");
+        m_mtgVia443->setToolTip("mtg слушает на loopback-порту, а релей отдаёт его по SNI фронт-домена на 443. "
+                                "Клиент подключается к 443 — обходит блокировку нестандартных портов.");
+        form->addRow(QString(), m_mtgVia443);
+
         form->addRow("Порт прокси", m_mtgPort);
         form->addRow("Фронт-домен", m_mtgFront);
         form->addRow("Secret", secRow);
@@ -817,10 +827,10 @@ void MainWindow::buildUi() {
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
         connect(copylink, &QPushButton::clicked, this, [this] {
             fromWidgets();
-            if (m_set.host.trimmed().isEmpty() || m_set.mtgPort.trimmed().isEmpty() || m_set.mtgSecret.trimmed().isEmpty()) {
-                logErr("нужны хост VDS, порт и секрет"); return;
+            if (m_set.host.trimmed().isEmpty() || m_set.mtgSecret.trimmed().isEmpty()) {
+                logErr("нужны хост VDS и секрет"); return;
             }
-            QGuiApplication::clipboard()->setText(tgProxyUrl(m_set.host.trimmed(), m_set.mtgPort.trimmed(), m_set.mtgSecret.trimmed()));
+            QGuiApplication::clipboard()->setText(tgProxyUrl(m_set.host.trimmed(), mtgEffPort(), m_set.mtgSecret.trimmed()));
             logOk("Ссылка скопирована");
         });
 
@@ -874,6 +884,7 @@ void MainWindow::toWidgets() {
     { const int p = m_set.mtgPort.toInt(); m_mtgPort->setValue(p > 0 ? p : 10443); }
     m_mtgFront->setCurrentText(m_set.mtgFront);
     m_mtgSecret->setText(m_set.mtgSecret);
+    m_mtgVia443->setChecked(m_set.mtgVia443);
 }
 
 void MainWindow::fromWidgets() {
@@ -892,6 +903,7 @@ void MainWindow::fromWidgets() {
     m_set.mtgPort = QString::number(m_mtgPort->value());
     m_set.mtgFront = m_mtgFront->currentText().trimmed();
     m_set.mtgSecret = trim(m_mtgSecret->text());
+    m_set.mtgVia443 = m_mtgVia443->isChecked();
     m_set.save();
 }
 
@@ -1203,16 +1215,20 @@ void MainWindow::onMtgDeploy() {
     fromWidgets();
     if (m_set.mtgSecret.trimmed().isEmpty()) { hideBusy(); logErr("Сначала сгенерируй секрет"); refreshMtgStatus(); return; }
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+    const bool via = m_set.mtgVia443;
+    const QString localPort = m_set.mtgLocalPort.trimmed().isEmpty() ? QString("9999") : m_set.mtgLocalPort.trimmed();
+    const QString bindPort = via ? localPort : port;
     const QString ip = m_set.host.trimmed();
     const bool ip4 = QRegularExpression("^[0-9.]+$").match(ip).hasMatch();
 
     QString toml;
     toml += "secret = \"" + m_set.mtgSecret.trimmed() + "\"\n";
-    toml += "bind-to = \"0.0.0.0:" + port + "\"\n";
+    toml += "bind-to = \"" + QString(via ? "127.0.0.1:" : "0.0.0.0:") + bindPort + "\"\n";
     toml += "concurrency = 8192\n";
     toml += "prefer-ip = \"prefer-ipv4\"\n";
     if (ip4) toml += "public-ipv4 = \"" + ip + "\"\n";
     toml += "tolerate-time-skewness = \"30s\"\n";
+    if (via) toml += "proxy-protocol-listener = true\n";
 
     const QString unit =
         "[Unit]\nDescription=mtg MTProto proxy\nAfter=network-online.target\nWants=network-online.target\n\n"
@@ -1229,14 +1245,19 @@ void MainWindow::onMtgDeploy() {
     script += "systemctl restart mtg\n";
     script += "sleep 1\n";
     script += "systemctl is-active mtg\n";
-    script += "ss -tlnp | grep ':" + port + "' || true\n";
+    script += "ss -tlnp | grep ':" + bindPort + "' || true\n";
     script += "echo MTG_DEPLOYED\n";
     showBusy("Развёртывание сервиса…");
     runSsh(script, "Развёртывание mtg на VDS", [this](bool ok, const QString& out) {
         hideBusy();
-        if (ok && out.contains("MTG_DEPLOYED")) logOk("MTProto-прокси развёрнут");
-        else logErr("Развёртывание mtg не удалось");
-        refreshMtgStatus();
+        const bool okd = ok && out.contains("MTG_DEPLOYED");
+        if (okd) logOk("MTProto-прокси развёрнут"); else logErr("Развёртывание mtg не удалось");
+        if (okd && m_set.mtgVia443) {
+            showBusy("Развёртывание релея (маршрут mtg)…");
+            runSsh(remoteDeployScript(), "Развёртывание релея", [this](bool, const QString&) { hideBusy(); refreshMtgStatus(); });
+        } else {
+            refreshMtgStatus();
+        }
     });
 }
 
@@ -1256,7 +1277,7 @@ void MainWindow::onMtgStatus() {
 void MainWindow::onMtgShowQr() {
     fromWidgets();
     const QString host = m_set.host.trimmed();
-    const QString port = m_set.mtgPort.trimmed();
+    const QString port = mtgEffPort();
     const QString sec = m_set.mtgSecret.trimmed();
     if (host.isEmpty() || port.isEmpty() || sec.isEmpty()) {
         logErr("Нужны хост VDS, порт и секрет");
@@ -1285,7 +1306,9 @@ void MainWindow::refreshMtgStatus() {
     showBusy("Обновление статуса mtg…");
     QApplication::processEvents();
     const QString ping = tcpPing(m_set.host.trimmed());
-    const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
+    const QString bindPort = m_set.mtgVia443
+        ? (m_set.mtgLocalPort.trimmed().isEmpty() ? QString("9999") : m_set.mtgLocalPort.trimmed())
+        : (m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed());
     const QString script = QString(
         "command -v mtg >/dev/null 2>&1 && echo \"VER=$(mtg --version 2>/dev/null | head -1 | awk '{print $1}')\" || echo VER=NO\n"
         "[ -f /etc/systemd/system/mtg.service ] && echo UNIT=yes || echo UNIT=no\n"
@@ -1294,7 +1317,7 @@ void MainWindow::refreshMtgStatus() {
         "[ -f /etc/mtg.toml ] && echo TOML=yes || echo TOML=no\n"
         "echo TOML_SECRET=$(grep -E '^[[:space:]]*secret[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
         "echo TOML_BIND=$(grep -E '^[[:space:]]*bind-to[[:space:]]*=' /etc/mtg.toml 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \"')\n"
-    ).arg(port);
+    ).arg(bindPort);
     runSsh(script, "Статус mtg", [this, ping](bool ok, const QString& out) {
         hideBusy();
         QString ver = "?", unit = "no", active = "inactive", port = "no", toml = "no", tsec, tbind;
@@ -1318,7 +1341,13 @@ void MainWindow::refreshMtgStatus() {
             m_mtgSecret->setText(tsec.trimmed());
             const int idx = tbind.lastIndexOf(':');
             const int p = (idx >= 0) ? tbind.mid(idx + 1).toInt() : 0;
-            if (p > 0) m_mtgPort->setValue(p);
+            if (tbind.startsWith("127.0.0.1:")) {
+                m_mtgVia443->setChecked(true);
+                if (p > 0) m_set.mtgLocalPort = QString::number(p);
+            } else {
+                m_mtgVia443->setChecked(false);
+                if (p > 0) m_mtgPort->setValue(p);
+            }
             const QString front = mtgFrontFromSecret(tsec.trimmed());
             if (!front.isEmpty()) m_mtgFront->setCurrentText(front);
             fromWidgets();
@@ -1368,7 +1397,7 @@ echo MTG_REMOVED
 void MainWindow::onMtgOpenTelegram() {
     fromWidgets();
     const QString host = m_set.host.trimmed();
-    const QString port = m_set.mtgPort.trimmed();
+    const QString port = mtgEffPort();
     const QString sec = m_set.mtgSecret.trimmed();
     if (host.isEmpty() || port.isEmpty() || sec.isEmpty()) { logErr("Нужны хост VDS, порт и секрет"); return; }
 
