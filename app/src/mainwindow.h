@@ -105,8 +105,8 @@ private:
     QListWidget* m_domains = nullptr;
 
     // MTProto
-    QLineEdit* m_mtgPort = nullptr;
-    QLineEdit* m_mtgFront = nullptr;
+    QSpinBox* m_mtgPort = nullptr;
+    QComboBox* m_mtgFront = nullptr;
     QLineEdit* m_mtgSecret = nullptr;
     QLabel* m_mtgLink = nullptr;
     QLabel* m_mtgQr = nullptr;

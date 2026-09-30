@@ -11,9 +11,13 @@
 #include <QGridLayout>
 #include <QTabWidget>
 #include <QLineEdit>
+#include <QSpinBox>
+#include <QComboBox>
 #include <QCheckBox>
 #include <QPushButton>
 #include <QListWidget>
+#include <QScrollArea>
+#include <QFont>
 #include <QPlainTextEdit>
 #include <QTextBrowser>
 #include <QTableWidget>
@@ -200,26 +204,42 @@ void MainWindow::buildUi() {
     {
         auto* w = new QWidget;
         auto* form = new QFormLayout(w);
-        m_host = new QLineEdit; form->addRow("Хост / IP", m_host);
-        m_port = new QLineEdit; form->addRow("SSH порт", m_port);
-        m_user = new QLineEdit; form->addRow("Пользователь", m_user);
+        form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+        m_host = new QLineEdit;
+        m_host->setToolTip("IP или домен твоего VDS (в поддерживаемой стране)");
+        form->addRow("Хост / IP", m_host);
+
+        m_port = new QLineEdit; m_port->setFixedWidth(100);
+        m_port->setToolTip("SSH-порт (обычно 22)");
+        form->addRow("SSH порт", m_port);
+
+        m_user = new QLineEdit;
+        m_user->setToolTip("SSH-пользователь (обычно root)");
+        form->addRow("Пользователь", m_user);
 
         auto* keyRow = new QWidget;
         auto* keyLay = new QHBoxLayout(keyRow); keyLay->setContentsMargins(0,0,0,0);
-        m_keyPath = new QLineEdit; m_browseKey = new QPushButton("…", keyRow);
+        m_keyPath = new QLineEdit;
+        m_keyPath->setToolTip("Приватный ключ. Предпочтительнее пароля (пароль не хранится в открытом виде).");
+        m_browseKey = new QPushButton("…", keyRow); m_browseKey->setFixedWidth(36);
         keyLay->addWidget(m_keyPath); keyLay->addWidget(m_browseKey);
         form->addRow("Приватный ключ", keyRow);
 
         m_usePassword = new QCheckBox("Использовать пароль");
+        m_usePassword->setToolTip("Если ключа нет — вход по паролю (передаётся через SSH_ASKPASS)");
         form->addRow(QString(), m_usePassword);
         m_password = new QLineEdit; m_password->setEchoMode(QLineEdit::Password);
+        m_password->setToolTip("SSH-пароль VDS");
         form->addRow("Пароль", m_password);
         m_savePassword = new QCheckBox("Сохранить пароль в конфиг (небезопасно)");
+        m_savePassword->setToolTip("Хранить пароль в ~/.config/... (файл 600). Лучше использовать ключ.");
         form->addRow(QString(), m_savePassword);
 
         auto* btns = new QWidget;
         auto* bl = new QHBoxLayout(btns); bl->setContentsMargins(0,0,0,0);
         auto* test = new QPushButton("Проверить подключение");
+        test->setToolTip("Проверить SSH, geo VDS, nginx и stream-модуль");
         bl->addWidget(test); bl->addStretch();
         form->addRow(btns);
 
@@ -238,11 +258,14 @@ void MainWindow::buildUi() {
         ll->addWidget(new QLabel("Домены для релея:"));
         m_domains = new QListWidget; ll->addWidget(m_domains);
         auto* dr = new QWidget; auto* drl = new QHBoxLayout(dr); drl->setContentsMargins(0,0,0,0);
-        auto* add = new QPushButton("Добавить"); auto* rem = new QPushButton("Удалить");
+        auto* add = new QPushButton("Добавить"); add->setToolTip("Добавить домен в список релея");
+        auto* rem = new QPushButton("Удалить"); rem->setToolTip("Удалить выбранные домены");
         drl->addWidget(add); drl->addWidget(rem); drl->addStretch();
         ll->addWidget(dr);
         auto* dr2 = new QWidget; auto* dr2l = new QHBoxLayout(dr2); dr2l->setContentsMargins(0,0,0,0);
-        auto* imp = new QPushButton("Импорт…"); auto* exp = new QPushButton("Экспорт…"); auto* rst = new QPushButton("Список по умолчанию");
+        auto* imp = new QPushButton("Импорт…"); imp->setToolTip("Загрузить список из .txt (по домену в строке)");
+        auto* exp = new QPushButton("Экспорт…"); exp->setToolTip("Сохранить текущий список в .txt");
+        auto* rst = new QPushButton("Список по умолчанию"); rst->setToolTip("Сбросить к списку Anthropic + OpenAI");
         dr2l->addWidget(imp); dr2l->addWidget(exp); dr2l->addWidget(rst); dr2l->addStretch();
         ll->addWidget(dr2);
         lay->addWidget(left, 2);
@@ -251,7 +274,8 @@ void MainWindow::buildUi() {
         rl->addWidget(new QLabel("SNI локального сайта (на VDS):"));
         m_siteDomains = new QListWidget; rl->addWidget(m_siteDomains);
         auto* sr = new QWidget; auto* srl = new QHBoxLayout(sr); srl->setContentsMargins(0,0,0,0);
-        auto* sadd = new QPushButton("Добавить"); auto* srem = new QPushButton("Удалить");
+        auto* sadd = new QPushButton("Добавить"); sadd->setToolTip("Домен, который должен идти на локальный сайт, а не наружу");
+        auto* srem = new QPushButton("Удалить");
         srl->addWidget(sadd); srl->addWidget(srem); srl->addStretch();
         rl->addWidget(sr);
         rl->addSpacing(8);
@@ -422,31 +446,68 @@ void MainWindow::buildUi() {
 
     // ===== MTProto =====
     {
+        auto* scroll = new QScrollArea;
+        scroll->setWidgetResizable(true);
         auto* w = new QWidget;
         auto* lay = new QVBoxLayout(w);
+        lay->setSpacing(8);
 
         auto* form = new QFormLayout;
-        m_mtgPort = new QLineEdit; m_mtgPort->setFixedWidth(120);
-        m_mtgFront = new QLineEdit;
-        m_mtgSecret = new QLineEdit; m_mtgSecret->setPlaceholderText("сгенерировать / вставить…");
+        form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+        m_mtgPort = new QSpinBox;
+        m_mtgPort->setRange(1, 65535);
+        m_mtgPort->setValue(10443);
+        m_mtgPort->setFixedWidth(120);
+        m_mtgPort->setToolTip("Порт, на котором слушает прокси. 443/80 обычно заняты сайтом/релеем.");
+
+        m_mtgFront = new QComboBox;
+        m_mtgFront->setEditable(true);
+        m_mtgFront->addItems({ "www.google.com", "www.cloudflare.com", "www.bing.com", "www.apple.com" });
+        m_mtgFront->setToolTip("Домен, под чей TLS маскируется прокси (FakeTLS). Популярный и незаблокированный.");
+
+        auto* secRow = new QWidget;
+        auto* secLay = new QHBoxLayout(secRow); secLay->setContentsMargins(0, 0, 0, 0);
+        m_mtgSecret = new QLineEdit;
+        m_mtgSecret->setPlaceholderText("сгенерировать / вставить…");
+        m_mtgSecret->setEchoMode(QLineEdit::Password);
+        m_mtgSecret->setToolTip("Секрет прокси (пароль). Никому не передавай.");
+        { QFont mono = m_mtgSecret->font(); mono.setFamily("monospace"); m_mtgSecret->setFont(mono); }
+        auto* secShow = new QPushButton("Показать"); secShow->setCheckable(true);
+        auto* secCopy = new QPushButton("Копировать");
+        secCopy->setToolTip("Скопировать секрет в буфер обмена");
+        secLay->addWidget(m_mtgSecret); secLay->addWidget(secShow); secLay->addWidget(secCopy);
+
         form->addRow("Порт прокси", m_mtgPort);
         form->addRow("Фронт-домен (маскировка)", m_mtgFront);
-        form->addRow("Secret", m_mtgSecret);
+        form->addRow("Secret", secRow);
         lay->addLayout(form);
+
+        connect(secShow, &QPushButton::toggled, this, [this, secShow](bool on) {
+            m_mtgSecret->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
+            secShow->setText(on ? "Скрыть" : "Показать");
+        });
+        connect(secCopy, &QPushButton::clicked, this, [this] {
+            QGuiApplication::clipboard()->setText(m_mtgSecret->text()); logOk("Секрет скопирован");
+        });
 
         m_mtgStatus = new QLabel("Статус: нажми «Обновить статус»");
         m_mtgStatus->setTextFormat(Qt::RichText);
         m_mtgStatus->setWordWrap(true);
+        m_mtgStatus->setStyleSheet("QLabel { padding: 6px; background: palette(base); border: 1px solid palette(mid); border-radius: 4px; }");
         lay->addWidget(m_mtgStatus);
 
         auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
         m_mtgInstallBtn = new QPushButton("Установить mtg на VDS");
+        m_mtgInstallBtn->setToolTip("Скачать последний mtg с GitHub и установить на VDS");
         m_mtgGenBtn = new QPushButton("Сгенерировать секрет");
+        m_mtgGenBtn->setToolTip("Сгенерировать новый FakeTLS-секрет под выбранный фронт-домен");
         l1->addWidget(m_mtgInstallBtn); l1->addWidget(m_mtgGenBtn); l1->addStretch();
         lay->addWidget(b1);
 
         auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
         m_mtgDeployBtn = new QPushButton("Развернуть сервис");
+        m_mtgDeployBtn->setToolTip("Написать /etc/mtg.toml и systemd-юнит, включить и запустить");
         m_mtgStartBtn = new QPushButton("Старт");
         m_mtgStopBtn = new QPushButton("Стоп");
         m_mtgRestartBtn = new QPushButton("Рестарт");
@@ -458,8 +519,10 @@ void MainWindow::buildUi() {
 
         auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
         auto* qr = new QPushButton("Показать ссылку и QR");
+        auto* copylink = new QPushButton("Копировать ссылку");
+        copylink->setToolTip("Скопировать ссылку t.me/proxy");
         auto* save = new QPushButton("Сохранить QR…");
-        l3->addWidget(qr); l3->addWidget(save); l3->addStretch();
+        l3->addWidget(qr); l3->addWidget(copylink); l3->addWidget(save); l3->addStretch();
         lay->addWidget(b3);
 
         m_mtgLink = new QLabel; m_mtgLink->setTextFormat(Qt::RichText);
@@ -476,6 +539,7 @@ void MainWindow::buildUi() {
             "MTProto-прокси для Telegram Desktop/мобильного (SNI-релей их не покрывает — ядро идёт по IP).\n"
             "Порядок: «Установить mtg на VDS» → «Сгенерировать секрет» → «Развернуть сервис» → «Показать QR».");
         hint->setWordWrap(true);
+        hint->setStyleSheet("QLabel { color: palette(mid); }");
         lay->addWidget(hint);
         lay->addStretch();
 
@@ -488,8 +552,17 @@ void MainWindow::buildUi() {
         connect(m_mtgStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshMtgStatus);
         connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
+        connect(copylink, &QPushButton::clicked, this, [this] {
+            fromWidgets();
+            if (m_set.host.trimmed().isEmpty() || m_set.mtgPort.trimmed().isEmpty() || m_set.mtgSecret.trimmed().isEmpty()) {
+                logErr("нужны хост VDS, порт и секрет"); return;
+            }
+            QGuiApplication::clipboard()->setText(tgProxyUrl(m_set.host.trimmed(), m_set.mtgPort.trimmed(), m_set.mtgSecret.trimmed()));
+            logOk("Ссылка скопирована");
+        });
 
-        tabs->addTab(w, "MTProto");
+        scroll->setWidget(w);
+        tabs->addTab(scroll, "MTProto");
 
         // автообновление статуса при переходе на вкладку MTProto
         connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int) {
@@ -517,7 +590,8 @@ void MainWindow::buildUi() {
     split->setStretchFactor(1, 1);
     rootLay->addWidget(split);
     setCentralWidget(central);
-    resize(1000, 720);
+    setMinimumSize(820, 600);
+    resize(1060, 760);
 }
 
 void MainWindow::toWidgets() {
@@ -534,8 +608,8 @@ void MainWindow::toWidgets() {
     m_relayExit->setText(m_set.relayExit);
     m_domains->clear(); for (const auto& d : m_set.domains) m_domains->addItem(d);
     m_siteDomains->clear(); for (const auto& d : m_set.siteDomains) m_siteDomains->addItem(d);
-    m_mtgPort->setText(m_set.mtgPort);
-    m_mtgFront->setText(m_set.mtgFront);
+    { const int p = m_set.mtgPort.toInt(); m_mtgPort->setValue(p > 0 ? p : 10443); }
+    m_mtgFront->setCurrentText(m_set.mtgFront);
     m_mtgSecret->setText(m_set.mtgSecret);
 }
 
@@ -552,8 +626,8 @@ void MainWindow::fromWidgets() {
     m_set.relayExit = trim(m_relayExit->text());
     m_set.domains.clear(); for (int i = 0; i < m_domains->count(); ++i) m_set.domains << m_domains->item(i)->text().trimmed();
     m_set.siteDomains.clear(); for (int i = 0; i < m_siteDomains->count(); ++i) m_set.siteDomains << m_siteDomains->item(i)->text().trimmed();
-    m_set.mtgPort = trim(m_mtgPort->text());
-    m_set.mtgFront = trim(m_mtgFront->text());
+    m_set.mtgPort = QString::number(m_mtgPort->value());
+    m_set.mtgFront = m_mtgFront->currentText().trimmed();
     m_set.mtgSecret = trim(m_mtgSecret->text());
     m_set.save();
 }
