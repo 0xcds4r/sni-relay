@@ -74,6 +74,7 @@ class AppState(app: Application) : AndroidViewModel(app) {
     private fun logErr(s: String) = logLine("[!] $s")
 
     private fun safeOutputLine(line: String, desc: String): String = when {
+        desc == "Импорт relay-доменов с VDS" && line.startsWith("DOMAINS=") -> "DOMAINS=[список получен]"
         line.trimStart().startsWith("TOML_SECRET=") -> "TOML_SECRET=[скрыт]"
         desc.contains("секрет", ignoreCase = true) &&
             line.trim().length >= 20 && !line.contains(' ') -> "[секрет скрыт]"
@@ -102,7 +103,47 @@ class AppState(app: Application) : AndroidViewModel(app) {
     fun vdsCheck() {
         runSsh(Shell.vdsCheckScript(), "Проверка подключения") { r ->
             vdsInfo = if (!r.ok && r.output.isBlank()) "Не удалось подключиться" else r.output.trim()
-            if (r.ok) logOk("VDS доступен") else logErr("Проверка VDS: ошибка")
+            if (r.ok) {
+                logOk("VDS доступен")
+                importRelayDomainsFromVds()
+            } else {
+                logErr("Проверка VDS: ошибка")
+            }
+        }
+    }
+
+    private fun importRelayDomainsFromVds() {
+        val backend = Gen.qshell(settings.relayExit.trim().ifEmpty { "127.0.0.1:9443" })
+        val script = """
+            f=/etc/nginx/stream-enabled/relay.conf
+            [ -r "${'$'}f" ] || { echo NO_RELAY_CONF; exit 1; }
+            awk -v backend=$backend '
+                BEGIN { printf "DOMAINS=" }
+                index(${ '$' }0, "map ") && index(${ '$' }0, "relay_backend") { inmap=1; next }
+                inmap && ${ '$' }1 == "}" { exit }
+                inmap {
+                    sub(/#.*/, "")
+                    if (NF >= 2 && ${ '$' }2 == backend ";") {
+                        if (found++) printf " "
+                        printf "%s", ${ '$' }1
+                    }
+                }
+                END { printf "\n" }
+            ' "${'$'}f"
+        """.trimIndent()
+        runSsh(script, "Импорт relay-доменов с VDS") { r ->
+            val domainPattern = Regex("^[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+${'$'}")
+            val domainLine = r.output.lineSequence().firstOrNull { it.startsWith("DOMAINS=") }
+            val imported = domainLine?.removePrefix("DOMAINS=")?.trim()?.split(Regex("\\s+"))
+                ?.filter { domainPattern.matches(it) }
+                ?.distinct()
+                .orEmpty()
+            if (!r.ok || imported.isEmpty()) {
+                logErr("relay-домены из VDS не прочитаны; локальный список не изменён")
+                return@runSsh
+            }
+            update { domains = imported.toMutableList() }
+            logOk("список доменов синхронизирован с VDS (${imported.size})")
         }
     }
 

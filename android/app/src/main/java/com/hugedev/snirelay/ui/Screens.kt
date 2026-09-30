@@ -111,6 +111,7 @@ fun VdsScreen(state: AppState) {
             RowSpace {
                 ActionButton("Проверить подключение", { state.vdsCheck() }, primary = true)
             }
+            Text("После проверки локальный список доменов синхронизируется с активным relay.conf на VDS.", color = TextDim, fontSize = 13.sp)
         }
         state.vdsInfo?.let { info ->
             SectionCard("Статус VDS") {
