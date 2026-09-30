@@ -55,6 +55,18 @@
 
 static QString trim(const QString& s) { return s.trimmed(); }
 
+// Пинг до хоста (средний RTT). Пусто, если ICMP недоступен.
+static QString pingOnce(const QString& host) {
+    if (host.isEmpty()) return QString();
+    QProcess p;
+    p.start("ping", { "-c", "3", "-W", "2", "-q", host });
+    if (!p.waitForFinished(5000)) { p.kill(); p.waitForFinished(500); return QString(); }
+    const QString out = QString::fromLocal8Bit(p.readAllStandardOutput());
+    static const QRegularExpression re("[=]\\s*[0-9.]+/([0-9.]+)/");
+    const auto m = re.match(out);
+    return m.hasMatch() ? (m.captured(1) + " ms") : QString();
+}
+
 // QR-код из текста (libqrencode) → QImage.
 static QImage makeQrImage(const QString& text, int target = 300) {
     const QByteArray data = text.toUtf8();
@@ -1263,6 +1275,8 @@ void MainWindow::refreshMtgStatus() {
     fromWidgets();
     if (m_set.host.trimmed().isEmpty()) { m_mtgStatus->setText("Статус: укажи VDS на вкладке «VDS»"); return; }
     showBusy("Обновление статуса mtg…");
+    QApplication::processEvents();
+    const QString ping = pingOnce(m_set.host.trimmed());
     const QString port = m_set.mtgPort.trimmed().isEmpty() ? QString("10443") : m_set.mtgPort.trimmed();
     const QString script = QString(
         "command -v mtg >/dev/null 2>&1 && echo \"VER=$(mtg --version 2>/dev/null | head -1 | awk '{print $1}')\" || echo VER=NO\n"
@@ -1306,6 +1320,7 @@ void MainWindow::refreshMtgStatus() {
         s += " · <b>сервис:</b> " + (haveUnit ? active : QString("нет"));
         s += QString(" · <b>порт:</b> ") + (port == "yes" ? QString("слушается") : QString("не слушается"));
         if (toml == "yes") s += " · <b>конфиг:</b> подставлен с VDS";
+        s += QString(" · <b>пинг:</b> ") + (ping.isEmpty() ? QString("n/a") : ping);
         m_mtgStatus->setText(s);
 
         m_mtgInstallBtn->setText((installed && haveUnit) ? "Обновить mtg и сервис" : "Установить и развернуть");
