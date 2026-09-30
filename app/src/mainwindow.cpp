@@ -1029,19 +1029,25 @@ void MainWindow::onCheckAll() {
     m_checkQueue.clear();
     for (const auto& d : m_set.domains) { QString t = d.trimmed(); if (!t.isEmpty()) m_checkQueue << t; }
     m_checkIdx = 0;
+    m_checkActive = 0;
     if (m_checkQueue.isEmpty()) { logErr("Список доменов пуст"); return; }
     m_checkTable->setRowCount(m_checkQueue.size());
     for (int i = 0; i < m_checkQueue.size(); ++i)
         m_checkTable->setItem(i, 0, new QTableWidgetItem(m_checkQueue[i]));
-    log("Проверка " + QString::number(m_checkQueue.size()) + " доменов…");
-    checkNext();
+    log("Проверка " + QString::number(m_checkQueue.size()) + " доменов (параллельно)…");
+    showBusy(QString("Проверка доменов… 0/%1").arg(m_checkQueue.size()));
+    const int concurrency = 12;
+    for (int i = 0; i < concurrency; ++i) launchCheckTask();
 }
 
-void MainWindow::checkNext() {
-    if (m_checkIdx >= m_checkQueue.size()) { hideBusy(); logOk("Проверка завершена"); return; }
+void MainWindow::launchCheckTask() {
+    if (m_checkIdx >= m_checkQueue.size()) {
+        if (m_checkActive == 0) { hideBusy(); logOk("Проверка завершена"); }
+        return;
+    }
     const int row = m_checkIdx;
     const QString d = m_checkQueue[m_checkIdx++];
-    showBusy(QString("Проверка доменов… %1/%2\n%3").arg(m_checkIdx).arg(m_checkQueue.size()).arg(d));
+    m_checkActive++;
     QStringList args{ "-s", "-o", "/dev/null", "-D", "-", "-m", "10", "--max-time", "10", "https://" + d + "/" };
     runProcess("curl", args, QProcessEnvironment::systemEnvironment(), "проверка " + d, {},
         [this, row, d](bool, const QString& out) {
@@ -1062,7 +1068,9 @@ void MainWindow::checkNext() {
             else if (!http.isEmpty() && (http.startsWith('2') || http.startsWith('3'))) status = "OK";
             else if (!http.isEmpty()) status = "HTTP " + http;
             setCheckRow(row, d, http, status, details);
-            checkNext();
+            m_checkActive--;
+            showBusy(QString("Проверка доменов… %1/%2").arg(m_checkIdx - m_checkActive).arg(m_checkQueue.size()));
+            launchCheckTask();
         }, false);
 }
 

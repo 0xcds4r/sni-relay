@@ -82,7 +82,7 @@ private:
     QString hostsBlock() const;
 
     // --- проверка доменов ---
-    void checkNext();
+    void launchCheckTask();
     void setCheckRow(int row, const QString& domain, const QString& http,
                      const QString& status, const QString& details);
 
@@ -137,6 +137,7 @@ private:
     QTableWidget* m_checkTable = nullptr;
     QStringList m_checkQueue;
     int m_checkIdx = 0;
+    int m_checkActive = 0;
 
     QPlainTextEdit* m_log = nullptr;
 
