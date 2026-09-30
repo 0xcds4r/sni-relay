@@ -572,10 +572,13 @@ void MainWindow::buildUi() {
         m_mtgLink->setOpenExternalLinks(true);
         m_mtgLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
         m_mtgLink->setWordWrap(true);
+        m_mtgLink->setVisible(false);
         c1->addWidget(m_mtgLink);
 
         auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
         auto* qr = new QPushButton("Показать QR");
+        qr->setCheckable(true);
+        qr->setToolTip("Показать/скрыть QR и ссылку");
         auto* copylink = new QPushButton("Копировать ссылку");
         copylink->setToolTip("Скопировать ссылку t.me/proxy");
         auto* addtg = new QPushButton("Добавить в Telegram Desktop");
@@ -587,6 +590,7 @@ void MainWindow::buildUi() {
 
         m_mtgQr = new QLabel;
         m_mtgQr->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        m_mtgQr->setVisible(false);
         c1->addWidget(m_mtgQr);
 
         // --- Карточка: параметры ---
@@ -672,7 +676,18 @@ void MainWindow::buildUi() {
         connect(m_mtgRestartBtn, &QPushButton::clicked, this, &MainWindow::onMtgRestart);
         connect(m_mtgStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshMtgStatus);
         connect(m_mtgRemoveBtn, &QPushButton::clicked, this, &MainWindow::onMtgRemove);
-        connect(qr, &QPushButton::clicked, this, &MainWindow::onMtgShowQr);
+        connect(qr, &QPushButton::toggled, this, [this, qr](bool on) {
+            if (on) {
+                onMtgShowQr();
+                m_mtgLink->setVisible(true);
+                m_mtgQr->setVisible(true);
+                qr->setText("Скрыть QR");
+            } else {
+                m_mtgLink->setVisible(false);
+                m_mtgQr->setVisible(false);
+                qr->setText("Показать QR");
+            }
+        });
         connect(addtg, &QPushButton::clicked, this, &MainWindow::onMtgOpenTelegram);
         connect(save, &QPushButton::clicked, this, &MainWindow::onMtgSaveQr);
         connect(copylink, &QPushButton::clicked, this, [this] {
