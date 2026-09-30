@@ -1032,15 +1032,15 @@ void MainWindow::onShowHostsEntries() {
     for (const auto& d : m_set.domains) { QString t = d.trimmed(); if (!t.isEmpty()) want.insert(t); }
     QFile f("/etc/hosts");
     if (!f.open(QIODevice::ReadOnly)) { logErr("не читается /etc/hosts"); return; }
-    log("--- записи /etc/hosts для доменов релея ---");
-    int n = 0;
+    QStringList found;
     for (const QString& line : QString::fromLocal8Bit(f.readAll()).split('\n')) {
         const QStringList parts = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
         for (int i = 1; i < parts.size(); ++i)
-            if (want.contains(parts[i])) { log(line); ++n; break; }
+            if (want.contains(parts[i])) { found << line; break; }
     }
-    if (n == 0) log("(нет)");
-    log("------------------------------------------");
+    const QString body = found.isEmpty() ? QString("(нет)\n") : found.join('\n') + "\n";
+    showTextDialog("Записи /etc/hosts",
+                   "--- записи /etc/hosts для доменов релея ---\n" + body + "------------------------------------------");
 }
 
 // ---------- слоты: проверка ----------
