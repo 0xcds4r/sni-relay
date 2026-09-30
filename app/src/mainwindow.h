@@ -60,6 +60,13 @@ private slots:
     void onMtgOpenTelegram();
     void refreshMtgStatus();
 
+    // Интеграции
+    void checkBrowser();
+    void fixBrowserAsyncDns();
+    void checkZapretOverlap();
+    void showVdsPorts();
+    void pickFreeMtgPort();
+
 private:
     void buildUi();
     void toWidgets();
@@ -136,6 +143,11 @@ private:
     QPushButton* m_mtgRestartBtn = nullptr;
     QPushButton* m_mtgStatusBtn = nullptr;
     QPushButton* m_mtgRemoveBtn = nullptr;
+
+    // Интеграции
+    QLabel* m_intBrowserStatus = nullptr;
+    QLabel* m_intZapretStatus = nullptr;
+    QLabel* m_intPortsStatus = nullptr;
 
     // check
     QTableWidget* m_checkTable = nullptr;

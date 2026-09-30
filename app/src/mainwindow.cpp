@@ -46,8 +46,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QRegularExpression>
 #include <QSet>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QVector>
 #include <memory>
@@ -556,32 +556,6 @@ void MainWindow::buildUi() {
         tabs->addTab(cardify(w, "ПРОВЕРКА"), "Проверка");
     }
 
-    // ===== О программе =====
-    {
-        auto* w = new QWidget;
-        auto* lay = new QVBoxLayout(w);
-        auto* label = new QLabel;
-        label->setTextFormat(Qt::RichText);
-        label->setOpenExternalLinks(true);
-        label->setTextInteractionFlags(Qt::TextBrowserInteraction);
-        label->setWordWrap(true);
-        label->setText(QString(
-            "<h2>SNI Relay Manager %1</h2>"
-            "<p>GUI для развёртывания и управления своим SNI-релеем на VDS:<br>"
-            "домены, <code>/etc/hosts</code>, развёртывание релея и проверка — в одном окне.</p>"
-            "<p><b>Автор:</b> 0xcds4r<br>"
-            "<b>Лицензия:</b> MIT</p>"
-            "<p><b>Ссылки:</b><br>"
-            "• <a href=\"https://github.com/0xcds4r/sni-relay\">Репозиторий на GitHub</a><br>"
-            "• <a href=\"https://github.com/0xcds4r/sni-relay/releases\">Релизы</a><br>"
-            "• <a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">Гайд по MTProto-прокси</a><br>"
-            "• <a href=\"https://github.com/0xcds4r/sni-relay#readme\">Документация (README)</a></p>"
-        ).arg(SRM_VERSION));
-        lay->addWidget(label);
-        lay->addStretch();
-        tabs->addTab(cardify(w, "О ПРОГРАММЕ", false), "О программе");
-    }
-
     // ===== FAQ =====
     {
         auto* w = new QWidget;
@@ -823,6 +797,106 @@ void MainWindow::buildUi() {
         connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int) {
             if (tabs->tabText(tabs->currentIndex()) == "MTProto") refreshMtgStatus();
         });
+    }
+
+    // ===== Интеграции =====
+    {
+        auto* scroll = new QScrollArea;
+        scroll->setWidgetResizable(true);
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        lay->setContentsMargins(16, 16, 16, 16);
+        lay->setSpacing(14);
+
+        auto addCard = [&](const QString& title) -> QVBoxLayout* {
+            auto* card = new QFrame;
+            card->setObjectName("card");
+            auto* cl = new QVBoxLayout(card);
+            cl->setContentsMargins(16, 14, 16, 16);
+            cl->setSpacing(10);
+            if (!title.isEmpty()) {
+                auto* t = new QLabel(title);
+                t->setObjectName("cardTitle");
+                cl->addWidget(t);
+            }
+            lay->addWidget(card);
+            return cl;
+        };
+        auto hint = [](const QString& s) {
+            auto* l = new QLabel(s); l->setObjectName("hint"); l->setWordWrap(true); return l;
+        };
+        auto statusBox = [](const QString& s) {
+            auto* l = new QLabel(s); l->setObjectName("statusBox"); l->setWordWrap(true); l->setTextFormat(Qt::RichText); return l;
+        };
+
+        // Браузер
+        auto* c1 = addCard("БРАУЗЕР (CHROME / CHROMIUM)");
+        c1->addWidget(hint("Если браузер резолвит мимо /etc/hosts (встроенный DNS AsyncDns) — добавь флаг "
+                           "и перезапусти браузер. Также выключи Secure DNS (DoH)."));
+        m_intBrowserStatus = statusBox("Статус: не проверялся");
+        c1->addWidget(m_intBrowserStatus);
+        auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
+        auto* brCheck = new QPushButton("Проверить");
+        auto* brFix = new QPushButton("Отключить AsyncDns"); brFix->setObjectName("primary");
+        brFix->setToolTip("Добавить --disable-features=AsyncDns в конфиг-флаги Chrome/Chromium");
+        l1->addWidget(brCheck); l1->addWidget(brFix); l1->addStretch();
+        c1->addWidget(b1);
+
+        // Zapret
+        auto* c2 = addCard("ZAPRET");
+        c2->addWidget(hint("Домены с SNI-фильтром нужно держать и в zapret-списках (десинк прячет SNI). "
+                           "Ниже — пересечение доменов релея с list-general.txt / list-general-user.txt."));
+        m_intZapretStatus = statusBox("Статус: не проверялся");
+        c2->addWidget(m_intZapretStatus);
+        auto* zBtn = new QPushButton("Проверить пересечения с zapret");
+        { auto* bw = new QWidget; auto* bl = new QHBoxLayout(bw); bl->setContentsMargins(0,0,0,0); bl->addWidget(zBtn); bl->addStretch(); c2->addWidget(bw); }
+
+        // Порты
+        auto* c3 = addCard("ПОРТЫ");
+        c3->addWidget(hint("Проверь занятые порты на VDS и подбери свободный для mtg."));
+        m_intPortsStatus = statusBox("Статус: не проверялся");
+        c3->addWidget(m_intPortsStatus);
+        auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
+        auto* pShow = new QPushButton("Занятые порты на VDS");
+        auto* pFree = new QPushButton("Свободный порт для mtg");
+        l3->addWidget(pShow); l3->addWidget(pFree); l3->addStretch();
+        c3->addWidget(b3);
+
+        lay->addStretch();
+        scroll->setWidget(w);
+        tabs->addTab(scroll, "Интеграции");
+
+        connect(brCheck, &QPushButton::clicked, this, &MainWindow::checkBrowser);
+        connect(brFix, &QPushButton::clicked, this, &MainWindow::fixBrowserAsyncDns);
+        connect(zBtn, &QPushButton::clicked, this, &MainWindow::checkZapretOverlap);
+        connect(pShow, &QPushButton::clicked, this, &MainWindow::showVdsPorts);
+        connect(pFree, &QPushButton::clicked, this, &MainWindow::pickFreeMtgPort);
+    }
+
+    // ===== О программе =====
+    {
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        auto* label = new QLabel;
+        label->setTextFormat(Qt::RichText);
+        label->setOpenExternalLinks(true);
+        label->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        label->setWordWrap(true);
+        label->setText(QString(
+            "<h2>SNI Relay Manager %1</h2>"
+            "<p>GUI для развёртывания и управления своим SNI-релеем на VDS:<br>"
+            "домены, <code>/etc/hosts</code>, развёртывание релея и проверка — в одном окне.</p>"
+            "<p><b>Автор:</b> 0xcds4r<br>"
+            "<b>Лицензия:</b> MIT</p>"
+            "<p><b>Ссылки:</b><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay\">Репозиторий на GitHub</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay/releases\">Релизы</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay/blob/main/MTProto.md\">Гайд по MTProto-прокси</a><br>"
+            "• <a href=\"https://github.com/0xcds4r/sni-relay#readme\">Документация (README)</a></p>"
+        ).arg(SRM_VERSION));
+        lay->addWidget(label);
+        lay->addStretch();
+        tabs->addTab(cardify(w, "О ПРОГРАММЕ", false), "О программе");
     }
 
     split->addWidget(tabs);
@@ -1392,4 +1466,118 @@ void MainWindow::onMtgOpenTelegram() {
     const QString tg = QString("tg://proxy?server=%1&port=%2&secret=%3").arg(host, port, sec);
     if (QDesktopServices::openUrl(QUrl(tg))) logOk("Открываю Telegram Desktop…");
     else logErr("Не удалось открыть tg:// — Telegram Desktop установлен?");
+}
+
+// ---------- Интеграции ----------
+
+void MainWindow::checkBrowser() {
+    QStringList lines;
+    const QList<QPair<QString, QString>> files = {
+        { QDir::homePath() + "/.config/chromium-flags.conf", "Chromium" },
+        { QDir::homePath() + "/.config/chrome-flags.conf",   "Google Chrome" },
+    };
+    for (const auto& f : files) {
+        QFile file(f.first);
+        if (!file.exists()) { lines << QString("%1: конфиг-файл не найден").arg(f.second); continue; }
+        const QString c = file.open(QIODevice::ReadOnly) ? QString::fromLocal8Bit(file.readAll()) : QString();
+        lines << QString("%1: AsyncDns %2").arg(f.second, c.contains("AsyncDns") ? "уже отключён" : "включён (резолвит мимо /etc/hosts)");
+    }
+    QStringList inst;
+    for (const char* b : { "chromium", "google-chrome", "google-chrome-stable", "brave" })
+        if (commandExists(b)) inst << b;
+    QString s = lines.join("<br>");
+    s += "<br>Браузеры: " + (inst.isEmpty() ? QString("не найдены") : inst.join(", "));
+    s += "<br>Не забудь выключить <b>Secure DNS (DoH)</b>.";
+    m_intBrowserStatus->setText(s);
+}
+
+void MainWindow::fixBrowserAsyncDns() {
+    const QByteArray flag("--disable-features=AsyncDns\n");
+    auto fixFile = [&](const QString& path, const QString& name, bool applicable) -> QString {
+        if (!applicable) return QString();
+        QFile f(path);
+        QString content;
+        if (f.exists()) {
+            if (f.open(QIODevice::ReadOnly)) { content = QString::fromLocal8Bit(f.readAll()); f.close(); }
+            if (content.contains("AsyncDns")) return name + ": уже есть";
+        }
+        QFile out(path);
+        if (!out.open(QIODevice::Append)) return name + ": не удалось записать";
+        if (!content.isEmpty() && !content.endsWith('\n')) out.write("\n");
+        out.write(flag);
+        out.close();
+        return name + ": добавлено";
+    };
+    const bool hasChromium = QDir(QDir::homePath() + "/.config/chromium").exists() || commandExists("chromium");
+    const bool hasChrome = QDir(QDir::homePath() + "/.config/google-chrome").exists()
+                           || commandExists("google-chrome") || commandExists("google-chrome-stable");
+    QStringList done;
+    if (hasChromium) done << fixFile(QDir::homePath() + "/.config/chromium-flags.conf", "Chromium", true);
+    if (hasChrome)   done << fixFile(QDir::homePath() + "/.config/chrome-flags.conf", "Google Chrome", true);
+    if (done.isEmpty()) done << "Chrome/Chromium не найдены";
+    log("AsyncDns: " + done.join("; "));
+    checkBrowser();
+}
+
+void MainWindow::checkZapretOverlap() {
+    fromWidgets();
+    const QStringList paths = {
+        "/opt/zapret/hostlists/list-general.txt",
+        "/opt/zapret/hostlists/list-general-user.txt",
+    };
+    QSet<QString> zap;
+    bool read = false;
+    for (const QString& p : paths) {
+        QFile f(p);
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        read = true;
+        for (QString l : QString::fromLocal8Bit(f.readAll()).split('\n')) {
+            l = l.trimmed();
+            if (!l.isEmpty() && !l.startsWith('#')) zap.insert(l);
+        }
+    }
+    if (!read) { m_intZapretStatus->setText("Не удалось прочитать списки zapret (нужен /opt/zapret/hostlists)"); return; }
+    QStringList inZ, outZ;
+    for (const auto& d : m_set.domains) {
+        const QString t = d.trimmed();
+        if (t.isEmpty()) continue;
+        (zap.contains(t) ? inZ : outZ) << t;
+    }
+    QString s = QString("<b>В zapret-списках:</b> %1 · <b>вне списков:</b> %2").arg(inZ.size()).arg(outZ.size());
+    s += "<br>В списках (десинк прячет SNI): " + (inZ.isEmpty() ? QString("—") : inZ.join(", "));
+    m_intZapretStatus->setText(s);
+    log(QString("Пересечение с zapret: в списках %1, вне %2").arg(inZ.size()).arg(outZ.size()));
+}
+
+void MainWindow::showVdsPorts() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { logErr("Укажи VDS на вкладке «VDS»"); return; }
+    showBusy("Чтение портов VDS…");
+    runSsh("ss -tlnp 2>/dev/null", "Порты VDS", [this](bool ok, const QString& out) {
+        hideBusy();
+        if (!ok) { m_intPortsStatus->setText("Не удалось получить список портов"); return; }
+        m_intPortsStatus->setText("Занятые порты получены — открыто окно");
+        showTextDialog("Занятые порты на VDS", out);
+    });
+}
+
+void MainWindow::pickFreeMtgPort() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { logErr("Укажи VDS на вкладке «VDS»"); return; }
+    showBusy("Подбор свободного порта…");
+    const QString sc = QString::fromUtf8(R"SH(for p in 2053 2083 2087 2096 8443 9443 10443 10555 11000 12000 13000 14000; do ss -tln 2>/dev/null | grep -q ":$p " || { echo PORT=$p; exit 0; }; done; echo PORT=
+)SH");
+    runSsh(sc, "Свободный порт mtg", [this](bool, const QString& out) {
+        hideBusy();
+        QString p;
+        for (const QString& l : out.split('\n')) {
+            const QString t = l.trimmed();
+            if (t.startsWith("PORT=")) { p = t.mid(5).trimmed(); break; }
+        }
+        if (p.isEmpty()) { m_intPortsStatus->setText("Свободный порт в наборе не найден"); return; }
+        m_mtgPort->setValue(p.toInt());
+        fromWidgets();
+        m_intPortsStatus->setText(QString("Свободный порт для mtg: <b>%1</b> (подставлен во вкладке MTProto)").arg(p));
+        logOk("Свободный порт mtg: " + p);
+    });
 }
