@@ -12,14 +12,17 @@ QString relayConf(const Settings& s) {
     l << "    map_hash_bucket_size 128;";
     l << "    map_hash_max_size 8192;";
     l << "    map $ssl_preread_server_name $relay_backend {";
+    QSet<QString> seen;
     for (const auto& d : s.domains) {
         const QString t = d.trimmed();
-        if (t.isEmpty() || t.startsWith('#')) continue;
+        if (t.isEmpty() || t.startsWith('#') || seen.contains(t)) continue;
+        seen.insert(t);
         l << QString("        %1 %2;").arg(t, s.relayExit);
     }
     for (const auto& d : s.siteDomains) {
         const QString t = d.trimmed();
-        if (t.isEmpty() || t.startsWith('#')) continue;
+        if (t.isEmpty() || t.startsWith('#') || seen.contains(t)) continue;
+        seen.insert(t);
         l << QString("        %1 %2;").arg(t, s.siteBackend);
     }
     if (s.mtgVia443 && !s.mtgFront.trimmed().isEmpty()) {

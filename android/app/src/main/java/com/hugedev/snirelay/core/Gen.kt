@@ -13,19 +13,23 @@ object Gen {
         l += "    map_hash_bucket_size 128;"
         l += "    map_hash_max_size 8192;"
         l += "    map \$ssl_preread_server_name \$relay_backend {"
+        val seen = HashSet<String>()
         for (d in s.domains) {
             val t = d.trim()
-            if (t.isEmpty() || t.startsWith("#")) continue
+            if (t.isEmpty() || t.startsWith("#") || !seen.add(t)) continue
             l += "        $t ${s.relayExit};"
         }
         for (d in s.siteDomains) {
             val t = d.trim()
-            if (t.isEmpty() || t.startsWith("#")) continue
+            if (t.isEmpty() || t.startsWith("#") || !seen.add(t)) continue
             l += "        $t ${s.siteBackend};"
         }
         if (s.mtgVia443 && s.mtgFront.trim().isNotEmpty()) {
-            val lp = s.mtgLocalPort.trim().ifEmpty { "9999" }
-            l += "        ${s.mtgFront.trim()} 127.0.0.1:$lp;   # MTProto (mtg)"
+            val front = s.mtgFront.trim()
+            if (seen.add(front)) {
+                val lp = s.mtgLocalPort.trim().ifEmpty { "9999" }
+                l += "        $front 127.0.0.1:$lp;   # MTProto (mtg)"
+            }
         }
         l += "        default ${if (s.hasSite) s.siteBackend else "127.0.0.1:1"};"
         l += "    }"
