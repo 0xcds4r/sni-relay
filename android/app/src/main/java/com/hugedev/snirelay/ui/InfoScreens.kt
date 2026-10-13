@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.sp
+import com.hugedev.snirelay.BuildConfig
 
 @Composable
 fun FaqScreen() {
@@ -56,7 +57,7 @@ fun AboutScreen() {
     val uriHandler = LocalUriHandler.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SectionCard("SNI Relay Manager") {
-            Text("Версия 1.3.1 (Android)", color = TextMain)
+            Text("Версия ${BuildConfig.VERSION_NAME} (Android)", color = TextMain)
             Text("GUI для своего SNI-релея на VDS: развёртывание, домены, VPN-клиент, проверка, MTProto.", color = TextDim, fontSize = 13.sp)
             Text("© 0xcds4r · MIT", color = TextDim, fontSize = 13.sp)
         }
