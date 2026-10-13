@@ -1,0 +1,197 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        run: echo "v=$(sed -nE 's/.*SRM_VERSION \"([^\"]+)\".*/\1/p' app/src/version.h)" >> "$GITHUB_OUTPUT"
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ pkg-config libqrencode-dev \
+            qt6-base-dev qt6-base-dev-tools libqt6svg6-dev libqt6svg6 wget file
+
+      - name: Build
+        run: cmake -S app -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+
+      - name: Collect binary
+        run: |
+          mkdir -p dist
+          cp build/sni-relay-manager dist/sni-relay-manager
+
+      - name: Build .deb
+        run: |
+          V="${{ steps.ver.outputs.v }}"
+          P="pkg"
+          rm -rf "$P"; mkdir -p "$P/DEBIAN" "$P/usr/bin" "$P/usr/share/applications" \
+            "$P/usr/share/icons/hicolor/scalable/apps" "$P/usr/share/pixmaps"
+          install -m755 build/sni-relay-manager "$P/usr/bin/sni-relay-manager"
+          sed 's#^Exec=.*#Exec=/usr/bin/sni-relay-manager#' app/assets/sni-relay-manager.desktop > "$P/usr/share/applications/sni-relay-manager.desktop"
+          cp app/assets/sni-relay-manager.svg "$P/usr/share/icons/hicolor/scalable/apps/sni-relay-manager.svg"
+          cp app/assets/png/sni-relay-manager-256.png "$P/usr/share/pixmaps/sni-relay-manager.png"
+          SIZE=$(du -sk "$P" | cut -f1)
+          printf '%s\n' \
+            "Package: sni-relay-manager" \
+            "Version: $V" \
+            "Architecture: amd64" \
+            "Maintainer: 0xcds4r <cds4r.official@gmail.com>" \
+            "Installed-Size: $SIZE" \
+            "Depends: libc6 (>= 2.34), libqt6core6, libqt6gui6, libqt6widgets6, libqt6svg6, libqrencode4, libstdc++6, libgcc-s1" \
+            "Section: net" \
+            "Priority: optional" \
+            "Homepage: https://github.com/0xcds4r/sni-relay" \
+            "Description: GUI for a self-hosted SNI relay on a VDS" \
+            " Deploy and manage an SNI relay (nginx stream + ssl_preread) on your VDS." \
+            > "$P/DEBIAN/control"
+          dpkg-deb --build --root-owner-group "$P" "dist/sni-relay-manager_${V}_amd64.deb"
+
+      - name: Build AppImage
+        run: |
+          V="${{ steps.ver.outputs.v }}"
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+          ln -sf linuxdeploy-plugin-qt-x86_64.AppImage linuxdeploy-plugin-qt
+          mkdir -p AppDir/usr/bin
+          cp build/sni-relay-manager AppDir/usr/bin/
+          sed 's#^Exec=.*#Exec=sni-relay-manager#' app/assets/sni-relay-manager.desktop > AppDir/sni-relay-manager.desktop
+          cp app/assets/png/sni-relay-manager-256.png AppDir/sni-relay-manager.png
+          ln -sf usr/bin/sni-relay-manager AppDir/AppRun
+          export PATH="$PWD:$PATH" QMAKE=qmake6 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1
+          export OUTPUT="sni-relay-manager-${V}-x86_64.AppImage"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage
+          mv "$OUTPUT" dist/
+
+      - name: Checksums
+        run: ( cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        shell: bash
+        run: echo "v=$(sed -nE 's/.*SRM_VERSION \"([^\"]+)\".*/\1/p' app/src/version.h)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Qt (MinGW)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          arch: win64_mingw
+          modules: 'qtsvg'
+          tools: 'tools_mingw1310'
+          cache: true
+
+      - name: Build
+        shell: cmd
+        run: |
+          cmake -S app -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+          cmake --build build --config Release -j
+
+      - name: Deploy Qt runtime
+        shell: cmd
+        run: |
+          mkdir dist
+          copy build\sni-relay-manager.exe dist\
+          windeployqt --release --no-translations --no-compiler-runtime --dir dist dist\sni-relay-manager.exe
+          if exist "%SystemRoot%\System32\OpenSSH\ssh.exe" copy "%SystemRoot%\System32\OpenSSH\ssh.exe" dist\
+          if exist "%SystemRoot%\System32\curl.exe" copy "%SystemRoot%\System32\curl.exe" dist\
+          copy LICENSE dist\
+
+      - name: Zip
+        shell: bash
+        run: |
+          cd dist && 7z a -tzip "../sni-relay-manager-${{ steps.ver.outputs.v }}-windows-x64.zip" * >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: sni-relay-manager-*-windows-x64.zip
+
+  android:
+    runs-on: ubuntu-22.04
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        run: echo "v=$(sed -nE 's/.*versionName = \"([^\"]+)\".*/\1/p' android/app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Signing key (optional)
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          mkdir -p android/keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore/sni-relay.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=keystore/sni-relay.jks
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build APK
+        run: |
+          cd android
+          if [ -f keystore.properties ]; then
+            ./gradlew --no-daemon assembleRelease
+            OUT=app/build/outputs/apk/release/app-release.apk
+          else
+            ./gradlew --no-daemon assembleDebug
+            OUT=app/build/outputs/apk/debug/app-debug.apk
+          fi
+          mkdir -p ../dist
+          cp "$OUT" "../dist/sni-relay-manager-${{ steps.ver.outputs.v }}-android-universal.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*.apk
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: List
+        run: ls -la assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
