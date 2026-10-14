@@ -77,9 +77,6 @@ jobs:
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage
           mv "$OUTPUT" dist/
 
-      - name: Checksums
-        run: ( cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt )
-
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -188,9 +185,58 @@ jobs:
           name: android
           path: dist/*.apk
 
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Packages
+        run: pacman -Syu --noconfirm base-devel cmake ninja git qt6-base qt6-svg libqrencode pkgconf zstd
+
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        run: echo "v=$(sed -nE 's/.*SRM_VERSION \"([^\"]+)\".*/\1/p' app/src/version.h)" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cmake -S app -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+
+      - name: Package (.pkg.tar.zst)
+        run: |
+          V="${{ steps.ver.outputs.v }}"
+          rm -rf pkg dist; mkdir -p pkg/usr/bin pkg/usr/share/applications \
+            pkg/usr/share/icons/hicolor/scalable/apps pkg/usr/share/pixmaps dist
+          install -m755 build/sni-relay-manager pkg/usr/bin/sni-relay-manager
+          sed 's#^Exec=.*#Exec=/usr/bin/sni-relay-manager#' app/assets/sni-relay-manager.desktop > pkg/usr/share/applications/sni-relay-manager.desktop
+          cp app/assets/sni-relay-manager.svg pkg/usr/share/icons/hicolor/scalable/apps/sni-relay-manager.svg
+          cp app/assets/png/sni-relay-manager-256.png pkg/usr/share/pixmaps/sni-relay-manager.png
+          SIZE=$(du -sb pkg | cut -f1)
+          cat > pkg/.PKGINFO <<EOF
+          pkgname = sni-relay-manager
+          pkgbase = sni-relay-manager
+          pkgver = $V-1
+          pkgdesc = GUI for a self-hosted SNI relay on a VDS
+          url = https://github.com/0xcds4r/sni-relay
+          builddate = $(date +%s)
+          packager = 0xcds4r <cds4r.official@gmail.com>
+          size = $SIZE
+          arch = x86_64
+          license = MIT
+          depend = qt6-base
+          depend = qt6-svg
+          depend = libqrencode
+          EOF
+          ( cd pkg && bsdtar -cf - .PKGINFO usr | zstd -q -19 > "../dist/sni-relay-manager-${V}-1-x86_64.pkg.tar.zst" )
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: dist/*.pkg.tar.zst
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, windows, android]
+    needs: [linux, windows, android, arch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -217,9 +263,10 @@ jobs:
         with:
           path: assets
           merge-multiple: true
-      - name: List
-        run: ls -la assets
+      - name: Checksums
+        run: ( cd assets && rm -f SHA256SUMS.txt && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt )
       - uses: softprops/action-gh-release@v2
         with:
           files: assets/*
+          body_path: RELEASE_NOTES.md
           generate_release_notes: false
