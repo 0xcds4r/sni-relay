@@ -69,7 +69,7 @@ chmod +x sni-relay-manager
 Распакуй sni-relay-manager-1.3.2-windows-x64.zip и запусти sni-relay-manager.exe
 ```
 
-**Android (8.0+):** установи `sni-relay-manager-1.3.2-android-universal.apk`. Разреши VPN-подключение, чтобы включить DNS-подмену relay-доменов без root.
+**Android (8.0+):** установи `sni-relay-manager-1.3.2-android-universal.apk` (подписан релизным ключом). Разреши VPN-подключение, чтобы включить DNS-подмену relay-доменов без root.
 
 ## Требования
 
