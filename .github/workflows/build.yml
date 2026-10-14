@@ -23,7 +23,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build g++ pkg-config libqrencode-dev \
-            qt6-base-dev qt6-base-dev-tools libqt6svg6-dev libqt6svg6 wget file
+            qt6-base-dev qt6-base-dev-tools libqt6svg6-dev libqt6svg6 \
+            libgl1-mesa-dev libglx-dev libegl1-mesa-dev wget file
 
       - name: Build
         run: cmake -S app -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
@@ -99,7 +100,6 @@ jobs:
         with:
           version: '6.8.1'
           arch: win64_mingw
-          modules: 'qtsvg'
           tools: 'tools_mingw1310'
           cache: true
 
@@ -145,10 +145,18 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      - name: Android SDK
+        run: |
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          curl -fsSL -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline.zip -d "$HOME/android-sdk/cmdline-tools"
+          mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+          export ANDROID_SDK_ROOT="$HOME/android-sdk" ANDROID_HOME="$HOME/android-sdk"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       - name: Signing key (optional)
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
