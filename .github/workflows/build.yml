@@ -190,7 +190,11 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Packages
-        run: pacman -Syu --noconfirm base-devel cmake ninja git qt6-base qt6-svg libqrencode pkgconf zstd
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm --needed gcc cmake ninja git qt6-base qt6-svg libqrencode pkgconf zstd
 
       - uses: actions/checkout@v4
 
