@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*', 'sni-relay-manager']
 
 permissions:
   contents: write
@@ -202,4 +202,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: assets/*
-          generate_release_notes: true
+          generate_release_notes: false
