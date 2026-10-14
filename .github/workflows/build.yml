@@ -193,6 +193,26 @@ jobs:
     needs: [linux, windows, android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove assets of other versions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tag = context.ref.replace('refs/tags/', '');
+            const ver = (fs.readFileSync('app/src/version.h', 'utf8').match(/SRM_VERSION "([^"]+)"/) || [])[1];
+            try {
+              const rel = await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
+              for (const a of rel.data.assets) {
+                const m = a.name.match(/(\d+\.\d+\.\d+)/);
+                if (m && m[1] !== ver) {
+                  await github.rest.repos.deleteReleaseAsset({ owner: context.repo.owner, repo: context.repo.repo, asset_id: a.id });
+                  core.info('deleted ' + a.name);
+                }
+              }
+            } catch (e) { core.info('no existing release: ' + e.message); }
+
       - uses: actions/download-artifact@v4
         with:
           path: assets
