@@ -156,6 +156,7 @@ jobs:
 
   android:
     runs-on: ubuntu-22.04
+    environment: ANDROID
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || vars.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD || vars.ANDROID_STORE_PASSWORD }}
