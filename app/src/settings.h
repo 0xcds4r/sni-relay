@@ -54,7 +54,8 @@ struct Settings {
             "videos.openai.com", "ios.chat.openai.com", "cdn.platform.openai.com",
             "developers.openai.com",
             "sdmntprukwest.oaiusercontent.com", "sdmntpritalynorth.oaiusercontent.com",
-            "sdmntprpolandcentral.oaiusercontent.com", "sdmntprnortheu.oaiusercontent.com"
+            "sdmntprpolandcentral.oaiusercontent.com", "sdmntprnortheu.oaiusercontent.com",
+            "*.googlevideo.com"
         };
     }
 

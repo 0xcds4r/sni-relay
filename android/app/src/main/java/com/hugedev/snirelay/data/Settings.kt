@@ -74,6 +74,7 @@ data class Settings(
             "developers.openai.com",
             "sdmntprukwest.oaiusercontent.com", "sdmntpritalynorth.oaiusercontent.com",
             "sdmntprpolandcentral.oaiusercontent.com", "sdmntprnortheu.oaiusercontent.com",
+            "*.googlevideo.com",
         )
 
         fun load(ctx: Context): Settings {

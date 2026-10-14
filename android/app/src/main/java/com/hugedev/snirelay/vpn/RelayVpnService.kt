@@ -127,9 +127,11 @@ class RelayVpnService : VpnService() {
         val parsed = parseQuestion(dns) ?: return null
         val (qname, qtype) = parsed
 
+        val q = qname.lowercase()
+        val hit = domains.contains(q) || domains.any { it.startsWith("*.") && q.endsWith(it.substring(1)) }
         val answer = when {
-            domains.contains(qname.lowercase()) && qtype == 1 -> buildAResponse(dns, vdsIp!!)
-            domains.contains(qname.lowercase()) && qtype == 28 -> buildEmptyResponse(dns)
+            hit && qtype == 1 -> buildAResponse(dns, vdsIp!!)
+            hit && qtype == 28 -> buildEmptyResponse(dns)
             else -> forward(dns)
         } ?: return null
 

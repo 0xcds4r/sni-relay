@@ -17,7 +17,12 @@ object Gen {
         for (d in s.domains) {
             val t = d.trim()
             if (t.isEmpty() || t.startsWith("#") || !seen.add(t)) continue
-            l += "        $t ${s.relayExit};"
+            if (t.startsWith("*.")) {
+                val rest = t.substring(2).replace(".", "\\.")
+                l += "        ~*\\.$rest\$ ${s.relayExit};"
+            } else {
+                l += "        $t ${s.relayExit};"
+            }
         }
         for (d in s.siteDomains) {
             val t = d.trim()

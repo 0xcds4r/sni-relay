@@ -17,7 +17,14 @@ QString relayConf(const Settings& s) {
         const QString t = d.trimmed();
         if (t.isEmpty() || t.startsWith('#') || seen.contains(t)) continue;
         seen.insert(t);
-        l << QString("        %1 %2;").arg(t, s.relayExit);
+        if (t.startsWith("*.")) {
+            // wildcard -> regex-ключ для nginx map
+            QString rest = t.mid(2);
+            rest.replace(".", "\\.");
+            l << QString("        ~*\\.%1$ %2;").arg(rest, s.relayExit);
+        } else {
+            l << QString("        %1 %2;").arg(t, s.relayExit);
+        }
     }
     for (const auto& d : s.siteDomains) {
         const QString t = d.trimmed();
@@ -88,7 +95,7 @@ QString rollbackScript(const Settings&) {
 
 QString hostsFile(const Settings& s, bool addRelay, const QString& currentHosts) {
     QSet<QString> want;
-    for (const auto& d : s.domains) { const QString t = d.trimmed(); if (!t.isEmpty()) want.insert(t); }
+    for (const auto& d : s.domains) { const QString t = d.trimmed(); if (!t.isEmpty() && !t.contains('*')) want.insert(t); }
 
     QStringList out;
     for (const QString& line : currentHosts.split('\n')) {
@@ -102,7 +109,7 @@ QString hostsFile(const Settings& s, bool addRelay, const QString& currentHosts)
     if (!res.endsWith('\n')) res += '\n';
     if (addRelay) {
         res += "\n# relay via " + s.host + "\n";
-        for (const auto& d : s.domains) { const QString t = d.trimmed(); if (!t.isEmpty()) res += s.host + " " + t + "\n"; }
+        for (const auto& d : s.domains) { const QString t = d.trimmed(); if (!t.isEmpty() && !t.contains('*')) res += s.host + " " + t + "\n"; }
     }
     return res;
 }
