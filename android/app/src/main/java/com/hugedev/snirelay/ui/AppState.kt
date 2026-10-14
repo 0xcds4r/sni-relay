@@ -2,6 +2,7 @@ package com.hugedev.snirelay.ui
 
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,16 @@ class AppState(app: Application) : AndroidViewModel(app) {
         private set
     private var mtgStatusInFlight = false
 
+    var realityStatus by mutableStateOf("Нажми «Обновить статус»")
+        private set
+    var realityInstalled by mutableStateOf(false)
+        private set
+    var realityHasUnit by mutableStateOf(false)
+        private set
+    var realityActive by mutableStateOf(false)
+        private set
+    private var realityStatusInFlight = false
+
     var vpnRunning by mutableStateOf(false)
 
     fun update(block: Settings.() -> Unit) {
@@ -76,6 +87,9 @@ class AppState(app: Application) : AndroidViewModel(app) {
     private fun safeOutputLine(line: String, desc: String): String = when {
         desc == "Импорт relay-доменов с VDS" && line.startsWith("DOMAINS=") -> "DOMAINS=[список получен]"
         line.trimStart().startsWith("TOML_SECRET=") -> "TOML_SECRET=[скрыт]"
+        line.trimStart().startsWith("SIDE_B64=") -> "SIDE_B64=[скрыт]"
+        line.trimStart().startsWith("PRIV=") -> "PRIV=[скрыт]"
+        line.trimStart().startsWith("PUB=") -> "PUB=[скрыт]"
         desc.contains("секрет", ignoreCase = true) &&
             line.trim().length >= 20 && !line.contains(' ') -> "[секрет скрыт]"
         else -> line
@@ -299,6 +313,164 @@ class AppState(app: Application) : AndroidViewModel(app) {
                 append(" · сервис: "); append(if (mtgHasUnit) active else "нет")
                 append(" · порт: "); append(if (port == "yes") "слушается" else "не слушается")
                 if (toml == "yes") append(" · конфиг: подставлен с VDS")
+            }
+        }
+    }
+
+    // ---- Reality (VLESS + Xray) ----
+
+    fun realityInstallDeploy() {
+        runSsh(Gen.realityInstall(), "Установка Xray") { r ->
+            if (!r.output.contains("XRAY_INSTALLED")) { logErr("установка Xray не удалась"); refreshRealityStatus(); return@runSsh }
+            realityGenKeys()
+        }
+    }
+
+    fun realityGenKeys() {
+        runSsh(Gen.realityGenKeys(), "Генерация ключей Reality") { r ->
+            if (!r.output.contains("REALITY_KEYS_OK")) { logErr("ключи не сгенерированы (Xray установлен?)"); refreshRealityStatus(); return@runSsh }
+            var uuid = ""; var priv = ""; var pub = ""; var sid = ""
+            for (l in r.output.lines()) {
+                val t = l.trim()
+                when {
+                    t.startsWith("UUID=") -> uuid = t.substring(5)
+                    t.startsWith("PRIV=") -> priv = t.substring(5)
+                    t.startsWith("PUB=") -> pub = t.substring(4)
+                    t.startsWith("SHORTID=") -> sid = t.substring(8)
+                }
+            }
+            update {
+                if (uuid.isNotEmpty()) realityUuid = uuid
+                if (priv.isNotEmpty()) realityPrivateKey = priv
+                if (pub.isNotEmpty()) realityPublicKey = pub
+                if (sid.isNotEmpty()) realityShortId = sid
+            }
+            logOk("Ключи Reality сгенерированы")
+            realityDeploy()
+        }
+    }
+
+    fun realityDeploy() {
+        val s = settings
+        if (s.realityUuid.trim().isEmpty() || s.realityPrivateKey.trim().isEmpty() || s.realityShortId.trim().isEmpty()) {
+            logErr("Нужны UUID, private key и short id — сначала «Сгенерировать ключи»"); refreshRealityStatus(); return
+        }
+        runSsh(Gen.realityDeployScript(s), "Развёртывание Reality") { r ->
+            if (r.output.contains("REALITY_DEPLOYED")) logOk("VLESS+Reality развёрнут") else logErr("развёртывание Reality не удалось")
+            refreshRealityStatus()
+        }
+    }
+
+    /** Открыть ссылку vless:// во внешнем клиенте (v2rayNG/Nekoray/sing-box). */
+    fun realityOpenInClient() {
+        val s = settings
+        if (s.host.isBlank() || s.realityUuid.isBlank() || s.realityPublicKey.isBlank()) {
+            logErr("Нужны хост VDS, UUID и public key — сначала разверни Reality"); return
+        }
+        val link = Gen.realityClientLink(s)
+        try {
+            val i = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(i)
+            logOk("Открываю vless:// в клиенте…")
+        } catch (e: Exception) {
+            logErr("Клиент не найден — скопируй ссылку или отсканируй QR")
+        }
+    }
+
+    /** Показать внешний IP: должен совпасть с VDS, если VPN клиента активен. */
+    fun realityCheckIp() {
+        val vds = settings.host.trim()
+        viewModelScope.launch {
+            val ip = withContext(Dispatchers.IO) {
+                try {
+                    val c = (java.net.URL("https://ipinfo.io/ip").openConnection() as java.net.HttpURLConnection)
+                    c.connectTimeout = 8000; c.readTimeout = 8000
+                    c.inputStream.bufferedReader().use { it.readText().trim() }
+                } catch (e: Exception) { "ошибка: ${e.message}" }
+            }
+            if (ip == vds) logOk("Внешний IP: $ip (VDS) — VPN активен")
+            else logLine("[!] Внешний IP: $ip (ожидался $vds) — клиент не подключён?")
+        }
+    }
+
+    fun realityStart() = runSsh("systemctl start xray && systemctl is-active xray", "Старт Xray") { refreshRealityStatus() }
+    fun realityStop() = runSsh("systemctl stop xray || true", "Стоп Xray") { refreshRealityStatus() }
+    fun realityRestart() = runSsh("systemctl restart xray && systemctl is-active xray", "Рестарт Xray") { refreshRealityStatus() }
+
+    fun realityRemove() {
+        runSsh(Gen.realityRemove(), "Удаление Xray") { r ->
+            if (r.output.contains("REALITY_REMOVED")) logOk("Xray удалён") else logErr("не удалось удалить Xray")
+            refreshRealityStatus()
+        }
+    }
+
+    fun refreshRealityStatus() {
+        if (settings.host.isBlank()) { realityStatus = "Статус: укажи VDS на вкладке «VDS»"; return }
+        if (realityStatusInFlight) return
+        realityStatusInFlight = true
+        realityStatus = "Проверяю Reality на VDS…"
+        refreshRealityStatusAttempt(0)
+    }
+
+    private fun refreshRealityStatusAttempt(attempt: Int) {
+        runSsh(Gen.realityStatus(settings), "Статус Reality") { r ->
+            val complete = listOf("VER=", "UNIT=", "ACTIVE=", "PORT=", "CFG=")
+                .all { marker -> r.output.lineSequence().any { it.trim().startsWith(marker) } }
+            if ((!r.ok || !complete) && attempt == 0) {
+                realityStatus = "Ответ неполный, повторяю проверку…"
+                viewModelScope.launch { delay(800); refreshRealityStatusAttempt(1) }
+                return@runSsh
+            }
+            realityStatusInFlight = false
+            if (!complete) {
+                realityStatus = "Не удалось получить статус Reality — проверь SSH и повтори"
+                logErr("ответ статуса Reality неполный"); return@runSsh
+            }
+            var ver = "?"; var unit = "no"; var active = "inactive"; var port = "no"; var cfg = "no"; var side = "no"; var b64 = ""
+            for (l in r.output.lines()) {
+                val t = l.trim()
+                when {
+                    t.startsWith("VER=") -> ver = t.substring(4)
+                    t.startsWith("UNIT=") -> unit = t.substring(5)
+                    t.startsWith("ACTIVE=") -> active = t.substring(7)
+                    t.startsWith("PORT=") -> port = t.substring(5)
+                    t.startsWith("CFG=") -> cfg = t.substring(4)
+                    t.startsWith("SIDE=") -> side = t.substring(5)
+                    t.startsWith("SIDE_B64=") -> b64 = t.substring(9)
+                }
+            }
+            realityInstalled = ver != "NO" && ver != "?"
+            realityHasUnit = unit == "yes"
+            realityActive = active == "active"
+            if (side == "yes" && b64.isNotBlank()) {
+                try {
+                    val j = org.json.JSONObject(String(android.util.Base64.decode(b64.trim(), android.util.Base64.DEFAULT)))
+                    val grpc = j.optString("transport", "reality") == "grpc"
+                    update {
+                        if (j.has("transport")) realityTransport = if (grpc) "grpc" else "reality"
+                        if (j.has("domain")) realityDomain = j.optString("domain", realityDomain)
+                        if (j.has("serviceName")) realityServiceName = j.optString("serviceName", realityServiceName)
+                        if (j.has("grpcPort")) realityGrpcPort = j.optString("grpcPort", realityGrpcPort)
+                        if (j.has("port")) {
+                            val p = j.optString("port")
+                            if (p.isNotBlank()) { if (grpc) realityGrpcPort = p else realityPort = p }
+                        }
+                        if (j.has("dest")) realityDest = j.optString("dest", realityDest)
+                        if (j.has("flow")) realityFlow = j.optString("flow", realityFlow)
+                        if (j.has("fingerprint")) realityFingerprint = j.optString("fingerprint", realityFingerprint)
+                        if (j.has("uuid")) realityUuid = j.optString("uuid", realityUuid)
+                        if (j.has("publicKey")) realityPublicKey = j.optString("publicKey", realityPublicKey)
+                        if (j.has("privateKey")) realityPrivateKey = j.optString("privateKey", realityPrivateKey)
+                        if (j.has("shortId")) realityShortId = j.optString("shortId", realityShortId)
+                    }
+                } catch (_: Exception) {}
+            }
+            realityStatus = buildString {
+                append("Xray: "); append(if (realityInstalled) ver else "не установлен")
+                append(" · сервис: "); append(if (realityHasUnit) active else "нет")
+                append(" · порт: "); append(if (port == "yes") "слушается" else "не слушается")
+                if (cfg == "yes") append(" · конфиг: есть")
+                if (side == "yes") append(" · параметры с VDS")
             }
         }
     }

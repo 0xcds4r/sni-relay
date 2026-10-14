@@ -21,6 +21,7 @@
 #include <QFrame>
 #include <QProgressBar>
 #include <QResizeEvent>
+#include <QCloseEvent>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFont>
@@ -49,6 +50,9 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QVector>
+#include <QSysInfo>
+#include <QStandardPaths>
+#include <QThread>
 #include <memory>
 
 // ---------- вспомогательные ----------
@@ -248,6 +252,11 @@ void MainWindow::resizeEvent(QResizeEvent* e) {
     QMainWindow::resizeEvent(e);
     if (m_busy && m_busy->isVisible() && centralWidget())
         m_busy->setGeometry(centralWidget()->geometry());
+}
+
+void MainWindow::closeEvent(QCloseEvent* e) {
+    stopTun();
+    QMainWindow::closeEvent(e);
 }
 
 bool MainWindow::commandExists(const QString& name) const {
@@ -761,6 +770,231 @@ void MainWindow::buildUi() {
         });
     }
 
+    // ===== Reality (VLESS + Xray) =====
+    {
+        auto* scroll = new QScrollArea;
+        scroll->setWidgetResizable(true);
+        auto* w = new QWidget;
+        auto* lay = new QVBoxLayout(w);
+        lay->setContentsMargins(16, 16, 16, 16);
+        lay->setSpacing(14);
+
+        auto addCard = [&](const QString& title) -> QVBoxLayout* {
+            auto* card = new QFrame;
+            card->setObjectName("card");
+            auto* cl = new QVBoxLayout(card);
+            cl->setContentsMargins(16, 14, 16, 16);
+            cl->setSpacing(10);
+            if (!title.isEmpty()) {
+                auto* t = new QLabel(title);
+                t->setObjectName("cardTitle");
+                cl->addWidget(t);
+            }
+            lay->addWidget(card);
+            return cl;
+        };
+
+        // --- Карточка: статус и подключение ---
+        auto* c1 = addCard("СТАТУС И ПОДКЛЮЧЕНИЕ");
+        m_realStatus = new QLabel("Нажми «Обновить статус»");
+        m_realStatus->setObjectName("mtgStatus");
+        m_realStatus->setTextFormat(Qt::RichText);
+        m_realStatus->setWordWrap(true);
+        c1->addWidget(m_realStatus);
+
+        auto* b3 = new QWidget; auto* l3 = new QHBoxLayout(b3); l3->setContentsMargins(0, 0, 0, 0);
+        auto* rqr = new QPushButton("Показать QR");
+        rqr->setCheckable(true);
+        auto* rcopylink = new QPushButton("Копировать vless://");
+        rcopylink->setToolTip("Скопировать ссылку vless:// для клиента (v2rayNG/Nekoray/sing-box)");
+        auto* rsave = new QPushButton("Сохранить QR…");
+        l3->addWidget(rqr); l3->addWidget(rcopylink); l3->addWidget(rsave); l3->addStretch();
+        c1->addWidget(b3);
+
+        m_realQr = new QLabel;
+        m_realQr->setObjectName("qr");
+        m_realQr->setAlignment(Qt::AlignCenter);
+        m_realQr->setStyleSheet("QLabel#qr { background: #ffffff; border: 1px solid #3a3c48; border-radius: 16px; padding: 16px; }");
+        m_realQr->setVisible(false);
+        c1->addWidget(m_realQr, 0, Qt::AlignHCenter);
+
+        // --- Карточка: параметры ---
+        auto* c2 = addCard("ПАРАМЕТРЫ");
+        auto* form = new QFormLayout;
+        form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+        form->setHorizontalSpacing(16);
+        form->setVerticalSpacing(10);
+
+        m_realPort = new QSpinBox;
+        m_realPort->setRange(1, 65535);
+        m_realPort->setValue(2053);
+        m_realPort->setFixedWidth(120);
+        m_realPort->setMinimumHeight(40);
+        m_realPort->setToolTip("Публичный порт Reality. Клиент идёт на VDS:порт, SNI = маскировочный домен.");
+
+        m_realDest = new QComboBox;
+        m_realDest->setEditable(true);
+        m_realDest->addItems({ "dl.google.com", "www.microsoft.com", "www.samsung.com",
+                               "www.lovelive-anime.jp", "www.apple.com", "www.cloudflare.com" });
+        m_realDest->setToolTip("Чужой домен, под чей TLS маскируется Reality (dest/serverName). "
+                               "Должен быть доступен с VDS и не заблокирован у тебя.");
+
+        m_realFlow = new QComboBox;
+        m_realFlow->addItems({ "xtls-rprx-vision", "none" });
+        m_realFlow->setToolTip("Flow для VLESS. Для Reality обычно xtls-rprx-vision.");
+
+        m_realFp = new QComboBox;
+        m_realFp->addItems({ "chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized" });
+        m_realFp->setToolTip("Отпечаток TLS клиента (uTLS). chrome — обычно лучший выбор.");
+
+        auto* uuidRow = new QWidget; auto* uuidLay = new QHBoxLayout(uuidRow); uuidLay->setContentsMargins(0, 0, 0, 0);
+        m_realUuid = new QLineEdit; m_realUuid->setPlaceholderText("сгенерировать…");
+        { QFont mono = m_realUuid->font(); mono.setFamily(monoFamily()); m_realUuid->setFont(mono); }
+        auto* uuidCopy = new QPushButton("Копировать");
+        uuidLay->addWidget(m_realUuid); uuidLay->addWidget(uuidCopy);
+
+        auto* pubRow = new QWidget; auto* pubLay = new QHBoxLayout(pubRow); pubLay->setContentsMargins(0, 0, 0, 0);
+        m_realPub = new QLineEdit; m_realPub->setPlaceholderText("pbk (публичный ключ)");
+        { QFont mono = m_realPub->font(); mono.setFamily(monoFamily()); m_realPub->setFont(mono); }
+        auto* pubCopy = new QPushButton("Копировать");
+        pubLay->addWidget(m_realPub); pubLay->addWidget(pubCopy);
+
+        auto* privRow = new QWidget; auto* privLay = new QHBoxLayout(privRow); privLay->setContentsMargins(0, 0, 0, 0);
+        m_realPriv = new QLineEdit; m_realPriv->setPlaceholderText("privateKey (сервер)");
+        m_realPriv->setEchoMode(QLineEdit::Password);
+        { QFont mono = m_realPriv->font(); mono.setFamily(monoFamily()); m_realPriv->setFont(mono); }
+        auto* privShow = new QPushButton("Показать"); privShow->setCheckable(true);
+        privLay->addWidget(m_realPriv); privLay->addWidget(privShow);
+
+        m_realSid = new QLineEdit; m_realSid->setPlaceholderText("shortId (hex)");
+        { QFont mono = m_realSid->font(); mono.setFamily(monoFamily()); m_realSid->setFont(mono); }
+
+        m_realTransport = new QComboBox;
+        m_realTransport->addItem("Reality (TCP)", "reality");
+        m_realTransport->addItem("gRPC + TLS (Cloudflare)", "grpc");
+        m_realTransport->setToolTip("Reality — свой TLS-маскировочный домен, без Cloudflare.\n"
+                                    "gRPC + TLS — за Cloudflare (домен проксируется, gRPC включён, SSL Flexible).");
+
+        m_realDomain = new QLineEdit; m_realDomain->setPlaceholderText("домен за Cloudflare (для gRPC)");
+        m_realDomain->setToolTip("Домен, проксируемый через Cloudflare (оранжевое облако). Клиент идёт на него:443.");
+        m_realService = new QLineEdit; m_realService->setPlaceholderText("serviceName (по умолчанию grpc)");
+        m_realGrpcPort = new QLineEdit; m_realGrpcPort->setFixedWidth(120);
+        m_realGrpcPort->setPlaceholderText("2083");
+        m_realGrpcPort->setToolTip("Порт origin для gRPC (Cloudflare-совместимый: 443/2053/2083/2087/2096/8443).");
+
+        form->addRow("Транспорт", m_realTransport);
+        form->addRow("Домен (Cloudflare)", m_realDomain);
+        form->addRow("serviceName", m_realService);
+        form->addRow("Порт origin (gRPC)", m_realGrpcPort);
+        form->addRow("Порт", m_realPort);
+        form->addRow("Маскировочный домен", m_realDest);
+        form->addRow("Flow", m_realFlow);
+        form->addRow("Fingerprint", m_realFp);
+        form->addRow("UUID", uuidRow);
+        form->addRow("Public key", pubRow);
+        form->addRow("Private key", privRow);
+        form->addRow("Short id", m_realSid);
+        c2->addLayout(form);
+
+        auto* cfHint = new QLabel(
+            "gRPC+TLS за Cloudflare: A-запись домена → IP VDS, Proxy ON (оранжевое облако), "
+            "SSL/TLS = Flexible, Network → gRPC = ON. Клиент подключается к домену на 443; "
+            "origin слушает порт выше. Для Reality поля «домен/serviceName/порт gRPC» не нужны.");
+        cfHint->setObjectName("hint"); cfHint->setWordWrap(true);
+        c2->addWidget(cfHint);
+
+        connect(privShow, &QPushButton::toggled, this, [this, privShow](bool on) {
+            m_realPriv->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
+            privShow->setText(on ? "Скрыть" : "Показать");
+        });
+        connect(uuidCopy, &QPushButton::clicked, this, [this] { QGuiApplication::clipboard()->setText(m_realUuid->text()); logOk("UUID скопирован"); });
+        connect(pubCopy, &QPushButton::clicked, this, [this] { QGuiApplication::clipboard()->setText(m_realPub->text()); logOk("Public key скопирован"); });
+
+        // --- Карточка: управление сервисом ---
+        auto* c3 = addCard("УПРАВЛЕНИЕ СЕРВИСОМ");
+        auto* b1 = new QWidget; auto* l1 = new QHBoxLayout(b1); l1->setContentsMargins(0, 0, 0, 0);
+        m_realInstallBtn = new QPushButton("Установить Xray и развернуть");
+        m_realInstallBtn->setObjectName("primary");
+        m_realInstallBtn->setToolTip("Установить/обновить Xray-core, сгенерировать ключи и развернуть Reality-сервис");
+        m_realGenBtn = new QPushButton("Сгенерировать ключи");
+        m_realGenBtn->setToolTip("Сгенерировать UUID, x25519-ключи и shortId (нужен установленный Xray)");
+        l1->addWidget(m_realInstallBtn); l1->addWidget(m_realGenBtn); l1->addStretch();
+        c3->addWidget(b1);
+
+        auto* b2 = new QWidget; auto* l2 = new QHBoxLayout(b2); l2->setContentsMargins(0, 0, 0, 0);
+        m_realStartBtn = new QPushButton("Старт");
+        m_realStopBtn = new QPushButton("Стоп");
+        m_realRestartBtn = new QPushButton("Рестарт");
+        m_realStatusBtn = new QPushButton("Обновить статус");
+        m_realRemoveBtn = new QPushButton("Удалить Xray и сервис");
+        m_realRemoveBtn->setObjectName("danger");
+        m_realRemoveBtn->setToolTip("Остановить и удалить Xray с VDS: сервис, конфиг, sidecar и бинарь");
+        l2->addWidget(m_realStartBtn); l2->addWidget(m_realStopBtn);
+        l2->addWidget(m_realRestartBtn); l2->addWidget(m_realStatusBtn);
+        l2->addWidget(m_realRemoveBtn); l2->addStretch();
+        c3->addWidget(b2);
+
+        // --- Карточка: клиент (подключение) ---
+        auto* c4 = addCard("КЛИЕНТ — ПОДКЛЮЧЕНИЕ");
+        m_realClientStatus = new QLabel("Отключено");
+        m_realClientStatus->setObjectName("mtgStatus");
+        m_realClientStatus->setTextFormat(Qt::RichText);
+        m_realClientStatus->setWordWrap(true);
+        c4->addWidget(m_realClientStatus);
+
+        auto* cb = new QWidget; auto* cbl = new QHBoxLayout(cb); cbl->setContentsMargins(0, 0, 0, 0);
+        m_realConnectBtn = new QPushButton("Подключиться");
+        m_realConnectBtn->setObjectName("primary");
+        m_realConnectBtn->setToolTip("Запустить локальный Xray-клиент и включить системный прокси");
+        m_realDisconnectBtn = new QPushButton("Отключиться");
+        m_realDisconnectBtn->setEnabled(false);
+        auto* ipBtn = new QPushButton("Проверить IP");
+        ipBtn->setToolTip("Показать внешний IP через прокси (должен быть IP VDS)");
+        cbl->addWidget(m_realConnectBtn); cbl->addWidget(m_realDisconnectBtn); cbl->addWidget(ipBtn); cbl->addStretch();
+        c4->addWidget(cb);
+
+        auto* chint = new QLabel(
+            "«Подключиться» поднимает системный TUN-туннель через sing-box — весь трафик идёт через VDS. "
+            "Потребуется пароль sudo (спросит один раз). «Отключиться» вернёт маршруты как было.");
+        chint->setObjectName("hint"); chint->setWordWrap(true);
+        c4->addWidget(chint);
+
+        connect(m_realConnectBtn, &QPushButton::clicked, this, &MainWindow::onRealityConnect);
+        connect(m_realDisconnectBtn, &QPushButton::clicked, this, &MainWindow::onRealityDisconnect);
+        connect(ipBtn, &QPushButton::clicked, this, &MainWindow::onRealityCheckIp);
+
+        auto* hint = new QLabel(
+            "VLESS + Reality (Xray): обходит блокировку по SNI. Клиент идёт на VDS:порт с SNI "
+            "маскировочного домена — провайдер видит обычный TLS к разрешённому сайту, а цель едет внутри шифра. "
+            "Работает для X/Instagram/Facebook и др. (в отличие от SNI-релея). "
+            "Клиент — v2rayNG/Nekoray/sing-box: скопируй ссылку vless:// или отсканируй QR.");
+        hint->setObjectName("hint");
+        hint->setWordWrap(true);
+        lay->addWidget(hint);
+        lay->addStretch();
+
+        connect(m_realInstallBtn, &QPushButton::clicked, this, &MainWindow::onRealityInstallDeploy);
+        connect(m_realGenBtn, &QPushButton::clicked, this, &MainWindow::onRealityGenKeys);
+        connect(m_realStartBtn, &QPushButton::clicked, this, &MainWindow::onRealityStart);
+        connect(m_realStopBtn, &QPushButton::clicked, this, &MainWindow::onRealityStop);
+        connect(m_realRestartBtn, &QPushButton::clicked, this, &MainWindow::onRealityRestart);
+        connect(m_realStatusBtn, &QPushButton::clicked, this, &MainWindow::refreshRealityStatus);
+        connect(m_realRemoveBtn, &QPushButton::clicked, this, &MainWindow::onRealityRemove);
+        connect(rqr, &QPushButton::toggled, this, [this, rqr](bool on) {
+            if (on) { onRealityShowQr(); m_realQr->setVisible(true); rqr->setText("Скрыть QR"); }
+            else { m_realQr->setVisible(false); rqr->setText("Показать QR"); }
+        });
+        connect(rsave, &QPushButton::clicked, this, &MainWindow::onRealitySaveQr);
+        connect(rcopylink, &QPushButton::clicked, this, &MainWindow::onRealityCopyLink);
+
+        scroll->setWidget(w);
+        tabs->addTab(scroll, "Reality");
+
+        connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int) {
+            if (tabs->tabText(tabs->currentIndex()) == "Reality") refreshRealityStatus();
+        });
+    }
+
     // ===== Интеграции =====
     {
         auto* scroll = new QScrollArea;
@@ -894,6 +1128,24 @@ void MainWindow::buildUi() {
             "<p><b>Часть telegram-хостов с ошибкой (macos/cloud/oauth.telegram.org и т.п.).</b><br>"
             "Это служебные/update/почтовые хосты Telegram, приложению не нужны — не мешают.</p>"
 
+            "<p><b>X / Instagram / Facebook не открываются (SNI-релей не помогает).</b><br>"
+            "Провайдер режет соединение <b>по SNI</b> ещё до твоего VDS — прозрачный SNI-релей тут бессилен. "
+            "Открой вкладку <b>Reality</b> → «Установить Xray и развернуть» и добавь полученную ссылку "
+            "<code>vless://</code> в клиент (v2rayNG / Nekoray / sing-box). Reality маскируется под "
+            "разрешённый домен, а настоящий адрес прячет внутри шифра.</p>"
+
+            "<p><b>Reality: порт занят / не подключается.</b><br>"
+            "Reality слушает свой публичный порт (по умолчанию 2053), 443 остаётся за SNI-релеем. "
+            "Если 2053 занят — укажи другой свободный порт. Маскировочный домен должен быть доступен "
+            "с VDS и не заблокирован у тебя (хорошие варианты: <code>dl.google.com</code>, "
+            "<code>www.microsoft.com</code>).</p>"
+
+            "<p><b>Desktop: «Подключиться» просит пароль sudo.</b><br>"
+            "Системный TUN-туннель создаёт сетевой интерфейс и меняет маршруты — для этого нужны права root. "
+            "Пароль вводится один раз и хранится только в памяти сессии. Клиент (<b>sing-box</b>) скачивается "
+            "автоматически при первом подключении. «Отключиться» (или закрытие окна) останавливает туннель "
+            "и возвращает маршруты.</p>"
+
             "<p><b>Где хранится конфиг?</b><br>"
             "<code>~/.config/sni-relay-manager/config.json</code> (пароль — только если включена галка «Сохранить»).</p>"
 
@@ -975,6 +1227,18 @@ void MainWindow::toWidgets() {
     m_mtgFront->setCurrentText(m_set.mtgFront);
     m_mtgSecret->setText(m_set.mtgSecret);
     m_mtgVia443->setChecked(m_set.mtgVia443);
+    { const int p = m_set.realityPort.toInt(); m_realPort->setValue(p > 0 ? p : 2053); }
+    m_realDest->setCurrentText(m_set.realityDest);
+    m_realFlow->setCurrentText(m_set.realityFlow);
+    m_realFp->setCurrentText(m_set.realityFingerprint);
+    m_realUuid->setText(m_set.realityUuid);
+    m_realPub->setText(m_set.realityPublicKey);
+    m_realPriv->setText(m_set.realityPrivateKey);
+    m_realSid->setText(m_set.realityShortId);
+    m_realTransport->setCurrentIndex(m_set.realityTransport.trimmed() == "grpc" ? 1 : 0);
+    m_realDomain->setText(m_set.realityDomain);
+    m_realService->setText(m_set.realityServiceName);
+    m_realGrpcPort->setText(m_set.realityGrpcPort);
 }
 
 void MainWindow::fromWidgets() {
@@ -994,6 +1258,18 @@ void MainWindow::fromWidgets() {
     m_set.mtgFront = m_mtgFront->currentText().trimmed();
     m_set.mtgSecret = trim(m_mtgSecret->text());
     m_set.mtgVia443 = m_mtgVia443->isChecked();
+    m_set.realityPort = QString::number(m_realPort->value());
+    m_set.realityDest = m_realDest->currentText().trimmed();
+    m_set.realityFlow = m_realFlow->currentText().trimmed();
+    m_set.realityFingerprint = m_realFp->currentText().trimmed();
+    m_set.realityUuid = trim(m_realUuid->text());
+    m_set.realityPublicKey = trim(m_realPub->text());
+    m_set.realityPrivateKey = trim(m_realPriv->text());
+    m_set.realityShortId = trim(m_realSid->text());
+    m_set.realityTransport = m_realTransport->currentData().toString();
+    m_set.realityDomain = trim(m_realDomain->text());
+    m_set.realityServiceName = trim(m_realService->text());
+    m_set.realityGrpcPort = trim(m_realGrpcPort->text());
     m_set.save();
 }
 
@@ -1532,6 +1808,380 @@ void MainWindow::onMtgOpenTelegram() {
     else logErr("Не удалось открыть tg:// — Telegram Desktop установлен?");
 }
 
+// ---------- Reality (VLESS + Xray) ----------
+
+void MainWindow::onRealityInstallDeploy() {
+    fromWidgets();
+    showBusy("Установка Xray на VDS…");
+    runSsh(gen::realityInstall(), "Установка Xray на VDS", [this](bool ok, const QString& out) {
+        if (!ok || !out.contains("XRAY_INSTALLED")) {
+            hideBusy(); logErr("установка Xray не удалась"); refreshRealityStatus(); return;
+        }
+        onRealityGenKeys();
+    });
+}
+
+void MainWindow::onRealityGenKeys() {
+    fromWidgets();
+    showBusy("Генерация ключей Reality…");
+    runSsh(gen::realityGenKeys(), "Генерация ключей Reality", [this](bool ok, const QString& out) {
+        if (!ok || !out.contains("REALITY_KEYS_OK")) {
+            hideBusy(); logErr("не удалось сгенерировать ключи (Xray установлен?)"); refreshRealityStatus(); return;
+        }
+        QString uuid, priv, pub, sid;
+        for (const QString& l : out.split('\n')) {
+            const QString t = l.trimmed();
+            if (t.startsWith("UUID=")) uuid = t.mid(5);
+            else if (t.startsWith("PRIV=")) priv = t.mid(5);
+            else if (t.startsWith("PUB=")) pub = t.mid(4);
+            else if (t.startsWith("SHORTID=")) sid = t.mid(8);
+        }
+        if (!uuid.isEmpty()) m_realUuid->setText(uuid);
+        if (!priv.isEmpty()) m_realPriv->setText(priv);
+        if (!pub.isEmpty()) m_realPub->setText(pub);
+        if (!sid.isEmpty()) m_realSid->setText(sid);
+        fromWidgets();
+        logOk("Ключи Reality сгенерированы");
+        onRealityDeploy();
+    });
+}
+
+void MainWindow::onRealityDeploy() {
+    fromWidgets();
+    if (m_set.realityUuid.trimmed().isEmpty() || m_set.realityPrivateKey.trimmed().isEmpty() ||
+        m_set.realityShortId.trimmed().isEmpty()) {
+        hideBusy(); logErr("Нужны UUID, private key и short id — сначала «Сгенерировать ключи»");
+        refreshRealityStatus(); return;
+    }
+    showBusy("Развёртывание Reality…");
+    runSsh(gen::realityDeployScript(m_set), "Развёртывание Reality", [this](bool ok, const QString& out) {
+        hideBusy();
+        if (ok && out.contains("REALITY_DEPLOYED")) logOk("VLESS+Reality развёрнут");
+        else logErr("развёртывание Reality не удалось");
+        refreshRealityStatus();
+    });
+}
+
+void MainWindow::onRealityStart()   { fromWidgets(); showBusy("Старт Xray…"); runSsh("systemctl start xray && systemctl is-active xray", "Старт Xray", [this](bool, const QString&) { hideBusy(); refreshRealityStatus(); }); }
+void MainWindow::onRealityStop()    { fromWidgets(); showBusy("Стоп Xray…"); runSsh("systemctl stop xray || true", "Стоп Xray", [this](bool, const QString&) { hideBusy(); refreshRealityStatus(); }); }
+void MainWindow::onRealityRestart() { fromWidgets(); showBusy("Рестарт Xray…"); runSsh("systemctl restart xray && systemctl is-active xray", "Рестарт Xray", [this](bool, const QString&) { hideBusy(); refreshRealityStatus(); }); }
+
+void MainWindow::onRealityStatus() {
+    fromWidgets();
+    runSsh(gen::realityStatus(m_set), "Статус Reality");
+}
+
+void MainWindow::onRealityShowQr() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty() || m_set.realityUuid.trimmed().isEmpty() ||
+        m_set.realityPublicKey.trimmed().isEmpty()) {
+        logErr("Нужны хост VDS, UUID и public key");
+        return;
+    }
+    const QString link = gen::realityClientLink(m_set);
+    const QImage img = makeQrImage(link, 300);
+    if (!img.isNull()) m_realQr->setPixmap(QPixmap::fromImage(img));
+    logOk("Ссылка и QR готовы (vless://)");
+}
+
+void MainWindow::onRealitySaveQr() {
+    if (m_realQr->pixmap().isNull()) { logErr("Сначала «Показать QR»"); return; }
+    const QString f = QFileDialog::getSaveFileName(this, "Сохранить QR", QDir::homePath() + "/reality-vless.png", "PNG (*.png)");
+    if (f.isEmpty()) return;
+    if (m_realQr->pixmap().toImage().save(f, "PNG")) logOk("QR сохранён: " + f);
+    else logErr("не удалось сохранить QR");
+}
+
+void MainWindow::onRealityCopyLink() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty() || m_set.realityUuid.trimmed().isEmpty()) {
+        logErr("нужны хост VDS и UUID"); return;
+    }
+    QGuiApplication::clipboard()->setText(gen::realityClientLink(m_set));
+    logOk("Ссылка vless:// скопирована");
+}
+
+void MainWindow::onRealityRemove() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { logErr("Не задан хост VDS"); return; }
+    if (QMessageBox::question(this, "Удалить Reality",
+            "Удалить Xray и Reality-сервис с VDS?\n\n"
+            "Будет остановлен и отключён сервис, удалены конфиг, sidecar-файл и бинарь xray.",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+    showBusy("Удаление Xray…");
+    runSsh(gen::realityRemove(), "Удаление Xray", [this](bool ok, const QString& out) {
+        hideBusy();
+        if (ok && out.contains("REALITY_REMOVED")) logOk("Xray и Reality удалены с VDS");
+        else logErr("не удалось удалить Xray");
+        refreshRealityStatus();
+    });
+}
+
+void MainWindow::refreshRealityStatus() {
+    fromWidgets();
+    if (m_set.host.trimmed().isEmpty()) { m_realStatus->setText("Статус: укажи VDS на вкладке «VDS»"); return; }
+    showBusy("Обновление статуса Reality…");
+    QApplication::processEvents();
+    const QString ping = tcpPing(m_set.host.trimmed());
+    runSsh(gen::realityStatus(m_set), "Статус Reality", [this, ping](bool ok, const QString& out) {
+        hideBusy();
+        QString ver = "?", unit = "no", active = "inactive", port = "no", cfg = "no", side = "no", b64;
+        for (const QString& l : out.split('\n')) {
+            const QString t = l.trimmed();
+            if (t.startsWith("VER=")) ver = t.mid(4);
+            else if (t.startsWith("UNIT=")) unit = t.mid(5);
+            else if (t.startsWith("ACTIVE=")) active = t.mid(7);
+            else if (t.startsWith("PORT=")) port = t.mid(5);
+            else if (t.startsWith("CFG=")) cfg = t.mid(4);
+            else if (t.startsWith("SIDE=")) side = t.mid(5);
+            else if (t.startsWith("SIDE_B64=")) b64 = t.mid(9);
+        }
+        if (!ok && ver == "?") { m_realStatus->setText("Статус: не удалось получить (VDS/SSH?)"); return; }
+        const bool installed = (ver != "NO" && ver != "?");
+        const bool haveUnit = (unit == "yes");
+        const bool isActive = (active == "active");
+
+        // импорт параметров из sidecar на VDS
+        if (side == "yes" && !b64.trimmed().isEmpty()) {
+            const QByteArray j = QByteArray::fromBase64(b64.trimmed().toLatin1());
+            const QJsonObject o = QJsonDocument::fromJson(j).object();
+            if (!o.isEmpty()) {
+                const bool grpc = (o.value("transport").toString() == "grpc");
+                if (o.contains("transport")) m_realTransport->setCurrentIndex(grpc ? 1 : 0);
+                if (o.contains("domain")) m_realDomain->setText(o.value("domain").toString());
+                if (o.contains("serviceName")) m_realService->setText(o.value("serviceName").toString());
+                if (o.contains("grpcPort")) m_realGrpcPort->setText(o.value("grpcPort").toString());
+                if (o.contains("port")) {
+                    const QString ps = o.value("port").toString();
+                    if (grpc) { if (!ps.isEmpty()) m_realGrpcPort->setText(ps); }
+                    else { const int p = ps.toInt(); if (p > 0) m_realPort->setValue(p); }
+                }
+                if (o.contains("dest")) m_realDest->setCurrentText(o.value("dest").toString());
+                if (o.contains("flow")) m_realFlow->setCurrentText(o.value("flow").toString());
+                if (o.contains("fingerprint")) m_realFp->setCurrentText(o.value("fingerprint").toString());
+                if (o.contains("uuid")) m_realUuid->setText(o.value("uuid").toString());
+                if (o.contains("publicKey")) m_realPub->setText(o.value("publicKey").toString());
+                if (o.contains("privateKey")) m_realPriv->setText(o.value("privateKey").toString());
+                if (o.contains("shortId")) m_realSid->setText(o.value("shortId").toString());
+                fromWidgets();
+            }
+        }
+
+        QString s = "<b>Xray:</b> " + (installed ? ver : QString("не установлен"));
+        s += " · <b>сервис:</b> " + (haveUnit ? active : QString("нет"));
+        s += QString(" · <b>порт:</b> ") + (port == "yes" ? QString("слушается") : QString("не слушается"));
+        if (cfg == "yes") s += " · <b>конфиг:</b> есть";
+        if (side == "yes") s += " · <b>параметры:</b> подставлены с VDS";
+        s += QString(" · <b>пинг:</b> ") + (ping.isEmpty() ? QString("n/a") : ping);
+        m_realStatus->setText(s);
+
+        m_realInstallBtn->setText((installed && haveUnit) ? "Обновить Xray и сервис" : "Установить Xray и развернуть");
+        m_realInstallBtn->setToolTip(installed ? "Обновить Xray и переразвернуть сервис"
+                                               : "Установить Xray, сгенерировать ключи и развернуть сервис");
+        m_realGenBtn->setEnabled(installed);
+        m_realStartBtn->setEnabled(haveUnit && !isActive);
+        m_realStopBtn->setEnabled(haveUnit && isActive);
+        m_realRestartBtn->setEnabled(haveUnit);
+        m_realRemoveBtn->setEnabled(installed || haveUnit);
+    });
+}
+
+// ---------- Reality: клиент (системный TUN-туннель через sing-box) ----------
+
+static QString realityDataDir() {
+    QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (base.isEmpty()) base = QDir::homePath() + "/.local/share/sni-relay-manager";
+    return base;
+}
+
+bool MainWindow::ensureSingboxBinary(QString& exeOut, QString& errOut) {
+#ifdef Q_OS_WIN
+    const QString name = "sing-box.exe";
+#else
+    const QString name = "sing-box";
+#endif
+    const QString inPath = sshutil::tool("sing-box");
+    { QProcess p; p.start(inPath, { "version" }); if (p.waitForFinished(4000) && p.exitCode() == 0) { exeOut = inPath; return true; } }
+    const QString managed = realityDataDir() + "/" + name;
+    if (QFileInfo::exists(managed)) {
+        QProcess p; p.start(managed, { "version" });
+        if (p.waitForFinished(4000) && p.exitCode() == 0) { exeOut = managed; return true; }
+    }
+    QDir().mkpath(realityDataDir());
+    QString asset;
+    const QString arch = QSysInfo::currentCpuArchitecture();
+#ifdef Q_OS_WIN
+    asset = "sing-box-windows-amd64.zip";
+#elif defined(Q_OS_MACOS)
+    asset = (arch == "arm64") ? "sing-box-darwin-arm64.tar.gz" : "sing-box-darwin-amd64.tar.gz";
+#else
+    if (arch == "arm64" || arch == "aarch64") asset = "sing-box-linux-arm64.tar.gz";
+    else if (arch.contains("arm")) asset = "sing-box-linux-armv7.tar.gz";
+    else asset = "sing-box-linux-amd64.tar.gz";
+#endif
+    // Имена ассетов sing-box содержат версию → сначала узнаём последний тег.
+    QString ver;
+    {
+        QProcess g;
+        g.start(sshutil::tool("curl"), { "-fsSL", "--max-time", "20",
+            "https://api.github.com/repos/SagerNet/sing-box/releases/latest" });
+        if (g.waitForFinished(25000) && g.exitCode() == 0) {
+            const QString j = QString::fromLocal8Bit(g.readAllStandardOutput());
+            const QRegularExpression re("\"tag_name\"\\s*:\\s*\"v?([0-9][^\"]*)\"");
+            const auto m = re.match(j);
+            if (m.hasMatch()) ver = m.captured(1);
+        }
+    }
+    const QString suffix = asset.mid(QString("sing-box-").size()); // напр. linux-amd64.tar.gz
+    const QString url = ver.isEmpty()
+        ? "https://github.com/SagerNet/sing-box/releases/latest/download/" + asset
+        : "https://github.com/SagerNet/sing-box/releases/download/v" + ver + "/sing-box-" + ver + "-" + suffix;
+    const QString dl = QDir::tempPath() + "/srm-singbox" + (asset.endsWith(".zip") ? ".zip" : ".tar.gz");
+    log("Скачиваю sing-box: " + url);
+    {
+        QProcess c;
+        c.start(sshutil::tool("curl"), { "-fsSL", "--max-time", "180", "-o", dl, url });
+        if (!c.waitForFinished(200000) || c.exitCode() != 0) { errOut = "не удалось скачать sing-box"; return false; }
+    }
+    const QString tmp = QDir::tempPath() + "/srm-singbox-extract";
+    QDir(tmp).removeRecursively(); QDir().mkpath(tmp);
+    bool ok = false;
+#ifdef Q_OS_WIN
+    {
+        QProcess p; p.start("powershell.exe", { "-NoProfile", "-Command",
+            QString("Expand-Archive -Force -LiteralPath '%1' -DestinationPath '%2'").arg(dl, tmp) });
+        if (p.waitForFinished(60000) && p.exitCode() == 0) ok = true;
+    }
+#else
+    {
+        QProcess p; p.start("tar", { "xzf", dl, "-C", tmp, "--strip-components=1" });
+        if (p.waitForFinished(60000) && p.exitCode() == 0) ok = true;
+    }
+#endif
+    QFile::remove(dl);
+    QString found;
+    if (ok) {
+        if (QFileInfo::exists(tmp + "/" + name)) found = tmp + "/" + name;
+        else {
+            const QStringList hits = QDir(tmp).entryList(QStringList() << name, QDir::Files, QDir::NoSort);
+            if (!hits.isEmpty()) found = tmp + "/" + hits.first();
+        }
+    }
+    if (found.isEmpty() || !QFileInfo::exists(found)) { errOut = "не удалось распаковать sing-box"; return false; }
+    QFile::remove(managed);
+    if (!QFile::copy(found, managed)) { errOut = "не удалось установить sing-box"; return false; }
+    QFile::setPermissions(managed, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                                   QFileDevice::ReadGroup | QFileDevice::ExeGroup |
+                                   QFileDevice::ReadOther | QFileDevice::ExeOther);
+    QDir(tmp).removeRecursively();
+    QProcess p; p.start(managed, { "version" });
+    if (!(p.waitForFinished(4000) && p.exitCode() == 0)) { errOut = "скачанный sing-box не запускается"; return false; }
+    exeOut = managed;
+    return true;
+}
+
+void MainWindow::sudoRun(const QStringList& args, const QString& desc, DoneFn done) {
+    if (m_sudoPass.isEmpty()) {
+        bool ok = false;
+        const QString p = QInputDialog::getText(this, "sudo",
+            "Пароль sudo (для запуска системного туннеля):", QLineEdit::Password, "", &ok);
+        if (!ok || p.isEmpty()) { logErr("нужен пароль sudo"); if (done) done(false, QString()); return; }
+        m_sudoPass = p;
+    }
+    runProcess("sudo", QStringList{ "-S", "-p", "" } + args,
+               QProcessEnvironment::systemEnvironment(), desc, (m_sudoPass + "\n").toUtf8(),
+               [this, done](bool ok, const QString& out) {
+                   if (!ok && out.contains("incorrect password", Qt::CaseInsensitive)) m_sudoPass.clear();
+                   if (done) done(ok, out);
+               }, true);
+}
+
+void MainWindow::stopTun() {
+    if (!m_tunRunning) return;
+    QProcess p;
+    p.start("sudo", { "-S", "-p", "", "systemctl", "stop", "sni-relay-tun" });
+    p.write((m_sudoPass + "\n").toUtf8()); p.closeWriteChannel();
+    p.waitForFinished(5000);
+    m_tunRunning = false;
+}
+
+void MainWindow::updateRealityClientUi() {
+    if (m_realConnectBtn) m_realConnectBtn->setEnabled(!m_tunRunning);
+    if (m_realDisconnectBtn) m_realDisconnectBtn->setEnabled(m_tunRunning);
+    if (m_realClientStatus) {
+        m_realClientStatus->setText(m_tunRunning
+            ? "<b>Подключено</b> · системный TUN-туннель (весь трафик через VDS)"
+            : "Отключено");
+    }
+}
+
+void MainWindow::onRealityConnect() {
+    fromWidgets();
+    const bool grpc = (m_set.realityTransport.trimmed() == "grpc");
+    if (m_set.host.trimmed().isEmpty() || m_set.realityUuid.trimmed().isEmpty()) {
+        logErr("Нужны хост VDS и UUID — сначала разверни Reality"); return;
+    }
+    if (!grpc && m_set.realityPublicKey.trimmed().isEmpty()) {
+        logErr("Нужен public key (Reality) — сначала разверни на VDS"); return;
+    }
+    showBusy("Подготовка TUN-туннеля…");
+    QApplication::processEvents();
+    QString exe, err;
+    if (!ensureSingboxBinary(exe, err)) { hideBusy(); logErr("sing-box: " + err); return; }
+    const QString cfgPath = realityDataDir() + "/singbox.json";
+    {
+        QFile f(cfgPath);
+        if (!f.open(QIODevice::WriteOnly)) { hideBusy(); logErr("не удалось записать singbox.json"); return; }
+        f.write(gen::realityTunConfig(m_set).toUtf8());
+        f.close();
+    }
+    sudoRun({ "systemctl", "stop", "sni-relay-tun" }, "Стоп старого туннеля", [this, exe, cfgPath](bool, const QString&) {
+        showBusy("Запуск sing-box (TUN)…");
+        sudoRun({ "systemd-run", "--system", "--unit=sni-relay-tun", "--collect",
+                  "--property=Type=simple", "--property=Restart=on-failure",
+                  exe, "run", "-c", cfgPath }, "Запуск sing-box", [this](bool, const QString&) {
+            QThread::msleep(1500);
+            sudoRun({ "systemctl", "is-active", "sni-relay-tun" }, "Проверка туннеля", [this](bool ok2, const QString& out2) {
+                hideBusy();
+                m_tunRunning = ok2 && out2.contains("active");
+                if (m_tunRunning) logOk("TUN-туннель поднят — весь трафик через VDS");
+                else logErr("не удалось поднять туннель: " + out2.trimmed());
+                updateRealityClientUi();
+            });
+        });
+    });
+}
+
+void MainWindow::onRealityDisconnect() {
+    showBusy("Отключение туннеля…");
+    QApplication::processEvents();
+    sudoRun({ "systemctl", "stop", "sni-relay-tun" }, "Остановка туннеля", [this](bool, const QString&) {
+        hideBusy();
+        m_tunRunning = false;
+        logOk("Туннель отключён");
+        updateRealityClientUi();
+    });
+}
+
+void MainWindow::onRealityCheckIp() {
+    fromWidgets();
+    if (!m_tunRunning) { logErr("Сначала «Подключиться»"); return; }
+    showBusy("Проверка внешнего IP…");
+    auto* p = new QProcess(this);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::finished, this, [this, p](int, QProcess::ExitStatus) {
+        hideBusy();
+        const QString ip = QString::fromLocal8Bit(p->readAllStandardOutput()).trimmed();
+        if (!ip.isEmpty()) {
+            const bool ok = (ip == m_set.host.trimmed());
+            log((ok ? QString("[OK] ") : QString("[!] ")) + "внешний IP: " + ip +
+                (ok ? QString(" (VDS)") : QString(" — ожидался ") + m_set.host.trimmed()));
+        } else logErr("не удалось получить IP");
+        p->deleteLater();
+    });
+    p->start(sshutil::tool("curl"), { "-s", "--max-time", "15", "https://ipinfo.io/ip" });
+}
 // ---------- Интеграции ----------
 
 void MainWindow::checkBrowser() {

@@ -19,8 +19,8 @@ android {
         applicationId = "com.hugedev.snirelay"
         minSdk = 26
         targetSdk = 36
-        versionCode = 132
-        versionName = "1.3.2"
+        versionCode = 140
+        versionName = "1.4.0"
         vectorDrawables { useSupportLibrary = true }
     }
 

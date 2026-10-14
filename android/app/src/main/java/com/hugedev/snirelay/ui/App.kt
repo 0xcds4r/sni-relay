@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 enum class TabId(val title: String) {
     VDS("VDS"), DOMAINS("Домены"), RELAY("Релей"), CLIENT("Клиент"),
-    CHECK("Проверка"), MTPROTO("MTProto"), INTEGRATIONS("Интеграции"),
+    CHECK("Проверка"), MTPROTO("MTProto"), REALITY("Reality"), INTEGRATIONS("Интеграции"),
     FAQ("FAQ"), ABOUT("О программе"),
 }
 
@@ -46,6 +46,9 @@ fun SniRelayApp(state: AppState, onStartVpn: () -> Unit) {
     LaunchedEffect(tab) {
         if (tab == TabId.MTPROTO && state.settings.host.isNotBlank()) {
             state.refreshMtgStatus()
+        }
+        if (tab == TabId.REALITY && state.settings.host.isNotBlank()) {
+            state.refreshRealityStatus()
         }
     }
     Box(Modifier.fillMaxSize().background(Bg)) {
@@ -75,6 +78,7 @@ fun SniRelayApp(state: AppState, onStartVpn: () -> Unit) {
                     TabId.CLIENT -> ClientScreen(state, onStartVpn)
                     TabId.CHECK -> CheckScreen(state)
                     TabId.MTPROTO -> MtprotoScreen(state)
+                    TabId.REALITY -> RealityScreen(state)
                     TabId.INTEGRATIONS -> IntegrationsScreen(state)
                     TabId.FAQ -> FaqScreen()
                     TabId.ABOUT -> AboutScreen()

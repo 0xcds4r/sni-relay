@@ -29,6 +29,19 @@ data class Settings(
     var mtgSecret: String = "",
     var mtgVia443: Boolean = true,
     var mtgLocalPort: String = "9999",
+
+    var realityPort: String = "2053",
+    var realityDest: String = "dl.google.com",
+    var realityFlow: String = "xtls-rprx-vision",
+    var realityFingerprint: String = "chrome",
+    var realityUuid: String = "",
+    var realityPublicKey: String = "",
+    var realityPrivateKey: String = "",
+    var realityShortId: String = "",
+    var realityTransport: String = "reality",
+    var realityDomain: String = "",
+    var realityServiceName: String = "grpc",
+    var realityGrpcPort: String = "2083",
 ) {
     fun save(ctx: Context) {
         val o = JSONObject()
@@ -49,6 +62,18 @@ data class Settings(
         o.put("mtgSecret", mtgSecret)
         o.put("mtgVia443", mtgVia443)
         o.put("mtgLocalPort", mtgLocalPort)
+        o.put("realityPort", realityPort)
+        o.put("realityDest", realityDest)
+        o.put("realityFlow", realityFlow)
+        o.put("realityFingerprint", realityFingerprint)
+        o.put("realityUuid", realityUuid)
+        o.put("realityPublicKey", realityPublicKey)
+        o.put("realityPrivateKey", realityPrivateKey)
+        o.put("realityShortId", realityShortId)
+        o.put("realityTransport", realityTransport)
+        o.put("realityDomain", realityDomain)
+        o.put("realityServiceName", realityServiceName)
+        o.put("realityGrpcPort", realityGrpcPort)
         configFile(ctx).writeText(o.toString(2))
     }
 
@@ -59,6 +84,8 @@ data class Settings(
     }
 
     fun effectiveMtgPort(): String = if (mtgVia443) "443" else mtgPort.ifBlank { "10443" }
+
+    fun effectiveRealityPort(): String = realityPort.ifBlank { "2053" }
 
     companion object {
         fun configFile(ctx: Context) = File(ctx.filesDir, "config.json")
@@ -100,6 +127,18 @@ data class Settings(
                 s.mtgSecret = o.optString("mtgSecret", s.mtgSecret)
                 s.mtgVia443 = o.optBoolean("mtgVia443", s.mtgVia443)
                 s.mtgLocalPort = o.optString("mtgLocalPort", s.mtgLocalPort)
+                s.realityPort = o.optString("realityPort", s.realityPort)
+                s.realityDest = o.optString("realityDest", s.realityDest)
+                s.realityFlow = o.optString("realityFlow", s.realityFlow)
+                s.realityFingerprint = o.optString("realityFingerprint", s.realityFingerprint)
+                s.realityUuid = o.optString("realityUuid", s.realityUuid)
+                s.realityPublicKey = o.optString("realityPublicKey", s.realityPublicKey)
+                s.realityPrivateKey = o.optString("realityPrivateKey", s.realityPrivateKey)
+                s.realityShortId = o.optString("realityShortId", s.realityShortId)
+                s.realityTransport = o.optString("realityTransport", s.realityTransport)
+                s.realityDomain = o.optString("realityDomain", s.realityDomain)
+                s.realityServiceName = o.optString("realityServiceName", s.realityServiceName)
+                s.realityGrpcPort = o.optString("realityGrpcPort", s.realityGrpcPort)
                 s
             } catch (_: Exception) {
                 s

@@ -37,6 +37,23 @@ struct Settings {
     bool mtgVia443 = true;              // слушать mtg на 443 через релей (SNI фронт-домена)
     QString mtgLocalPort = "9999";      // loopback-порт mtg, когда via443
 
+    // --- VLESS + Reality (Xray) ---
+    QString realityPort = "2053";       // публичный порт Reality (SNI = realityDest)
+    QString realityDest = "dl.google.com"; // чужой домен, под чей TLS маскируется
+    QString realityFlow = "xtls-rprx-vision";
+    QString realityFingerprint = "chrome";
+    QString realityUuid;                // id клиента
+    QString realityPublicKey;           // pbk (в клиентской ссылке)
+    QString realityPrivateKey;          // privateKey (в серверном конфиге)
+    QString realityShortId;             // sid
+    QString realitySocksPort = "10808"; // локальный SOCKS-порт клиента
+    QString realityHttpPort = "10809";  // локальный HTTP-порт клиента
+    bool realitySetProxy = true;        // выставлять системный прокси при подключении
+    QString realityTransport = "reality"; // "reality" | "grpc" (gRPC+TLS за Cloudflare)
+    QString realityDomain;                // домен за Cloudflare (для gRPC)
+    QString realityServiceName = "grpc";  // gRPC serviceName
+    QString realityGrpcPort = "2083";     // порт origin для gRPC (CF-совместимый)
+
     static QString configPath() {
         QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
         if (dir.isEmpty()) dir = QDir::homePath() + "/.config/sni-relay-manager";
@@ -90,6 +107,21 @@ struct Settings {
         s.mtgSecret = str("mtgSecret", s.mtgSecret);
         s.mtgVia443 = o.value("mtgVia443").toBool(s.mtgVia443);
         s.mtgLocalPort = str("mtgLocalPort", s.mtgLocalPort);
+        s.realityPort = str("realityPort", s.realityPort);
+        s.realityDest = str("realityDest", s.realityDest);
+        s.realityFlow = str("realityFlow", s.realityFlow);
+        s.realityFingerprint = str("realityFingerprint", s.realityFingerprint);
+        s.realityUuid = str("realityUuid", s.realityUuid);
+        s.realityPublicKey = str("realityPublicKey", s.realityPublicKey);
+        s.realityPrivateKey = str("realityPrivateKey", s.realityPrivateKey);
+        s.realityShortId = str("realityShortId", s.realityShortId);
+        s.realitySocksPort = str("realitySocksPort", s.realitySocksPort);
+        s.realityHttpPort = str("realityHttpPort", s.realityHttpPort);
+        s.realitySetProxy = o.value("realitySetProxy").toBool(s.realitySetProxy);
+        s.realityTransport = str("realityTransport", s.realityTransport);
+        s.realityDomain = str("realityDomain", s.realityDomain);
+        s.realityServiceName = str("realityServiceName", s.realityServiceName);
+        s.realityGrpcPort = str("realityGrpcPort", s.realityGrpcPort);
         return s;
     }
 
@@ -113,6 +145,21 @@ struct Settings {
         o["mtgSecret"] = mtgSecret;
         o["mtgVia443"] = mtgVia443;
         o["mtgLocalPort"] = mtgLocalPort;
+        o["realityPort"] = realityPort;
+        o["realityDest"] = realityDest;
+        o["realityFlow"] = realityFlow;
+        o["realityFingerprint"] = realityFingerprint;
+        o["realityUuid"] = realityUuid;
+        o["realityPublicKey"] = realityPublicKey;
+        o["realityPrivateKey"] = realityPrivateKey;
+        o["realityShortId"] = realityShortId;
+        o["realitySocksPort"] = realitySocksPort;
+        o["realityHttpPort"] = realityHttpPort;
+        o["realitySetProxy"] = realitySetProxy;
+        o["realityTransport"] = realityTransport;
+        o["realityDomain"] = realityDomain;
+        o["realityServiceName"] = realityServiceName;
+        o["realityGrpcPort"] = realityGrpcPort;
         QSaveFile f(configPath());
         if (!f.open(QIODevice::WriteOnly)) return false;
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));

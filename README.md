@@ -32,8 +32,8 @@
 
 | Путь | Назначение |
 |---|---|
-| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6, Linux/Windows): VDS, домены, релей, hosts, проверка, **MTProto**, интеграции |
-| [`android/`](android/) | **Android-приложение** (Kotlin/Compose): SSH-пульт, MTProto и локальный DNS-VPN без root |
+| [`app/`](app/) | **GUI-приложение** SNI Relay Manager (C++/Qt6, Linux/Windows): VDS, домены, релей, hosts, проверка, **MTProto**, **Reality (VLESS+Xray)**, интеграции |
+| [`android/`](android/) | **Android-приложение** (Kotlin/Compose): SSH-пульт, MTProto, Reality и локальный DNS-VPN без root |
 | [`setup-vds.sh`](setup-vds.sh) | Автонастройка VDS: бэкап, конфиги, перенос сайта, `nginx -t`, reload (с откатом) |
 | [`client-hosts.sh`](client-hosts.sh) | Прописать/убрать домены в `/etc/hosts` на клиенте |
 | [`relay.conf.example`](relay.conf.example) | Шаблон `stream`-конфига релея |
@@ -65,19 +65,20 @@ cmake --build build
 ```
 
 Вкладки приложения: **VDS · Домены · Релей · Клиент · Проверка · MTProto ·
-Интеграции · FAQ · О программе**.
+Reality · Интеграции · FAQ · О программе**.
 
 1. Вкладка **VDS** — адрес VDS, пользователь, ключ/пароль → «Проверить подключение».
 2. Вкладка **Релей** — «Развернуть / обновить».
 3. Вкладка **Клиент** — «Прописать домены в /etc/hosts».
 4. Вкладка **MTProto** — для Telegram-приложения: «Установить и развернуть» (прокси на 443 через релей), ссылка и QR.
-5. Вкладка **Интеграции** — отключить AsyncDns в Chrome, пересечения с zapret, порты.
-6. Выключи **Secure DNS (DoH)** в браузере.
-7. Вкладка **Проверка** — «Проверить все домены».
+5. Вкладка **Reality** — для сайтов, заблокированных **по SNI** (X/Instagram/Facebook). Транспорт: **Reality (TCP)** или **gRPC + TLS (Cloudflare)**. «Установить Xray и развернуть» → ссылка `vless://`, QR и JSON. Подключение: на **десктопе** — «Подключиться» (системный **TUN-туннель** через sing-box, весь трафик через VDS); на **Android** — «Подключиться» откроет ссылку в клиенте (v2rayNG / Nekoray / sing-box).
+6. Вкладка **Интеграции** — отключить AsyncDns в Chrome, пересечения с zapret, порты.
+7. Выключи **Secure DNS (DoH)** в браузере.
+8. Вкладка **Проверка** — «Проверить все домены».
 
 CLI без GUI: `--print-config`, `--print-deploy`, `--print-rollback`,
 `--print-hosts`, `--ssh-test`, `--print-config-path`, `--mtg-link`,
-`--mtg-qr=PATH`, `--version`.
+`--mtg-qr=PATH`, `--reality-link`, `--reality-qr=PATH`, `--version`.
 
 ### Вариант B — скрипты (без GUI)
 

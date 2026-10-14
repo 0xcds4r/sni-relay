@@ -197,4 +197,179 @@ object Gen {
         if ((bytes[0].toInt() and 0xFF) != 0xEE) return ""
         return String(bytes, 17, bytes.size - 17, Charsets.UTF_8)
     }
+
+    // --- Reality (VLESS + Xray) ---
+
+    private fun realPort(s: Settings) = s.realityPort.trim().ifEmpty { "2053" }
+    private fun realDest(s: Settings) = s.realityDest.trim().ifEmpty { "dl.google.com" }
+    private fun realFlow(s: Settings) = s.realityFlow.trim().ifEmpty { "xtls-rprx-vision" }
+    private fun realFp(s: Settings) = s.realityFingerprint.trim().ifEmpty { "chrome" }
+    private fun isGrpc(s: Settings) = s.realityTransport.trim() == "grpc"
+    private fun realEffPort(s: Settings) = if (isGrpc(s)) s.realityGrpcPort.trim().ifEmpty { "2083" } else realPort(s)
+    private fun realService(s: Settings) = s.realityServiceName.trim().ifEmpty { "grpc" }
+    private fun realDomain(s: Settings) = s.realityDomain.trim().ifEmpty { s.host.trim() }
+
+    fun realityInstall(): String =
+        "set -e\n" +
+            "export DEBIAN_FRONTEND=noninteractive\n" +
+            "curl -fsSL -o /tmp/xray-install.sh https://github.com/XTLS/Xray-install/raw/main/install-release.sh\n" +
+            "bash /tmp/xray-install.sh install\n" +
+            "rm -f /tmp/xray-install.sh\n" +
+            "command -v xray >/dev/null || { echo NO_XRAY; exit 1; }\n" +
+            "xray version | head -1\n" +
+            "echo XRAY_INSTALLED\n"
+
+    fun realityGenKeys(): String =
+        "set -e\n" +
+            "command -v xray >/dev/null || { echo NO_XRAY; exit 1; }\n" +
+            "echo \"UUID=\$(xray uuid)\"\n" +
+            "K=\$(xray x25519 | grep -oE '[A-Za-z0-9_-]{43}=?')\n" +
+            "echo \"PRIV=\$(printf '%s\\n' \"\$K\" | sed -n 1p)\"\n" +
+            "echo \"PUB=\$(printf '%s\\n' \"\$K\" | sed -n 2p)\"\n" +
+            "echo \"SHORTID=\$(openssl rand -hex 8)\"\n" +
+            "echo REALITY_KEYS_OK\n"
+
+    fun realityServerConfig(s: Settings): String {
+        val port = realEffPort(s)
+        if (isGrpc(s)) {
+            val svc = realService(s)
+            return buildString {
+                append("{\n")
+                append("  \"log\": { \"loglevel\": \"warning\" },\n")
+                append("  \"inbounds\": [\n")
+                append("    {\n")
+                append("      \"tag\": \"vless-grpc\",\n")
+                append("      \"listen\": \"0.0.0.0\",\n")
+                append("      \"port\": $port,\n")
+                append("      \"protocol\": \"vless\",\n")
+                append("      \"settings\": {\n")
+                append("        \"clients\": [ { \"id\": \"${s.realityUuid.trim()}\" } ],\n")
+                append("        \"decryption\": \"none\"\n")
+                append("      },\n")
+                append("      \"streamSettings\": {\n")
+                append("        \"network\": \"grpc\",\n")
+                append("        \"grpcSettings\": { \"serviceName\": \"$svc\", \"multiMode\": false }\n")
+                append("      },\n")
+                append("      \"sniffing\": { \"enabled\": true, \"destOverride\": [\"http\",\"tls\",\"quic\"] }\n")
+                append("    }\n")
+                append("  ],\n")
+                append("  \"outbounds\": [ { \"protocol\": \"freedom\", \"tag\": \"direct\" } ]\n")
+                append("}\n")
+            }
+        }
+        val dest = realDest(s); val flow = realFlow(s)
+        return buildString {
+            append("{\n")
+            append("  \"log\": { \"loglevel\": \"warning\" },\n")
+            append("  \"inbounds\": [\n")
+            append("    {\n")
+            append("      \"tag\": \"vless-reality\",\n")
+            append("      \"listen\": \"0.0.0.0\",\n")
+            append("      \"port\": $port,\n")
+            append("      \"protocol\": \"vless\",\n")
+            append("      \"settings\": {\n")
+            append("        \"clients\": [ { \"id\": \"${s.realityUuid.trim()}\", \"flow\": \"$flow\" } ],\n")
+            append("        \"decryption\": \"none\"\n")
+            append("      },\n")
+            append("      \"streamSettings\": {\n")
+            append("        \"network\": \"tcp\",\n")
+            append("        \"security\": \"reality\",\n")
+            append("        \"realitySettings\": {\n")
+            append("          \"show\": false,\n")
+            append("          \"dest\": \"$dest:443\",\n")
+            append("          \"xver\": 0,\n")
+            append("          \"serverNames\": [ \"$dest\" ],\n")
+            append("          \"privateKey\": \"${s.realityPrivateKey.trim()}\",\n")
+            append("          \"shortIds\": [ \"${s.realityShortId.trim()}\" ]\n")
+            append("        }\n")
+            append("      },\n")
+            append("      \"sniffing\": { \"enabled\": true, \"destOverride\": [\"http\",\"tls\",\"quic\"] }\n")
+            append("    }\n")
+            append("  ],\n")
+            append("  \"outbounds\": [ { \"protocol\": \"freedom\", \"tag\": \"direct\" } ]\n")
+            append("}\n")
+        }
+    }
+
+    fun realitySidecar(s: Settings): String = buildString {
+        append("{\n")
+        append("  \"host\": \"${s.host.trim()}\",\n")
+        append("  \"transport\": \"${if (isGrpc(s)) "grpc" else "reality"}\",\n")
+        append("  \"port\": \"${realEffPort(s)}\",\n")
+        append("  \"domain\": \"${realDomain(s)}\",\n")
+        append("  \"serviceName\": \"${realService(s)}\",\n")
+        append("  \"grpcPort\": \"${s.realityGrpcPort.trim().ifEmpty { "2083" }}\",\n")
+        append("  \"dest\": \"${realDest(s)}\",\n")
+        append("  \"flow\": \"${realFlow(s)}\",\n")
+        append("  \"fingerprint\": \"${realFp(s)}\",\n")
+        append("  \"uuid\": \"${s.realityUuid.trim()}\",\n")
+        append("  \"publicKey\": \"${s.realityPublicKey.trim()}\",\n")
+        append("  \"privateKey\": \"${s.realityPrivateKey.trim()}\",\n")
+        append("  \"shortId\": \"${s.realityShortId.trim()}\"\n")
+        append("}\n")
+    }
+
+    fun realityDeployScript(s: Settings): String {
+        val port = realPort(s)
+        val cfg = realityServerConfig(s)
+        val side = realitySidecar(s)
+        return buildString {
+            append("set -e\n")
+            append("command -v xray >/dev/null || { echo NO_XRAY; exit 1; }\n")
+            append("mkdir -p /usr/local/etc/xray\n")
+            append("cat > /usr/local/etc/xray/config.json <<'EOF_CFG'\n$cfg" + "EOF_CFG\n")
+            append("cat > /etc/sni-relay-reality.json <<'EOF_SIDE'\n$side" + "EOF_SIDE\n")
+            append("chmod 600 /etc/sni-relay-reality.json\n")
+            append("cat > /etc/systemd/system/xray.service <<'EOF_UNIT'\n")
+            append("[Unit]\nDescription=Xray Service\nAfter=network.target nss-lookup.target\nWants=network-online.target\n\n")
+            append("[Service]\nUser=root\nExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json\n")
+            append("Restart=on-failure\nRestartSec=3\nLimitNOFILE=1000000\nNoNewPrivileges=true\n\n")
+            append("[Install]\nWantedBy=multi-user.target\nEOF_UNIT\n")
+            append("systemctl daemon-reload\n")
+            append("systemctl enable xray >/dev/null 2>&1 || true\n")
+            append("systemctl restart xray\n")
+            append("sleep 1\n")
+            append("systemctl is-active xray\n")
+            append("ss -tlnp | grep ':$port' || true\n")
+            append("echo REALITY_DEPLOYED\n")
+        }
+    }
+
+    fun realityStatus(s: Settings): String {
+        val port = realEffPort(s)
+        return "command -v xray >/dev/null 2>&1 && echo \"VER=\$(xray version 2>/dev/null | head -1 | awk '{print \$2}')\" || echo VER=NO\n" +
+            "[ -f /etc/systemd/system/xray.service ] && echo UNIT=yes || echo UNIT=no\n" +
+            "echo \"ACTIVE=\$(systemctl is-active xray 2>/dev/null || true)\"\n" +
+            "ss -tlnp 2>/dev/null | grep -q ':$port ' && echo PORT=yes || echo PORT=no\n" +
+            "[ -f /usr/local/etc/xray/config.json ] && echo CFG=yes || echo CFG=no\n" +
+            "[ -f /etc/sni-relay-reality.json ] && echo SIDE=yes || echo SIDE=no\n" +
+            "echo \"SIDE_B64=\$(base64 -w0 /etc/sni-relay-reality.json 2>/dev/null)\"\n"
+    }
+
+    fun realityRemove(): String = """
+        systemctl stop xray 2>/dev/null || true
+        systemctl disable xray 2>/dev/null || true
+        rm -f /etc/systemd/system/xray.service /etc/sni-relay-reality.json /usr/local/bin/xray
+        rm -rf /usr/local/etc/xray
+        systemctl daemon-reload
+        systemctl reset-failed xray 2>/dev/null || true
+        echo REALITY_REMOVED
+    """.trimIndent() + "\n"
+
+    fun realityClientLink(s: Settings): String {
+        val uuid = s.realityUuid.trim()
+        val fp = realFp(s)
+        if (isGrpc(s)) {
+            val domain = realDomain(s)
+            val svc = realService(s)
+            return "vless://$uuid@$domain:443?encryption=none&security=tls&sni=$domain&fp=$fp&type=grpc&serviceName=$svc&mode=gun#HugeDev-gRPC"
+        }
+        val host = s.host.trim()
+        val port = realEffPort(s)
+        val dest = realDest(s)
+        val flow = realFlow(s)
+        val pub = s.realityPublicKey.trim()
+        val sid = s.realityShortId.trim()
+        return "vless://$uuid@$host:$port?encryption=none&flow=$flow&security=reality&sni=$dest&fp=$fp&pbk=$pub&sid=$sid&type=tcp&headerType=none#HugeDev-Reality"
+    }
 }

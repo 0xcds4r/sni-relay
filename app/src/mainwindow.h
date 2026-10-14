@@ -20,6 +20,7 @@ class QTabWidget;
 class QPushButton;
 class QProgressBar;
 class QResizeEvent;
+class QCloseEvent;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -28,6 +29,7 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent* e) override;
+    void closeEvent(QCloseEvent* e) override;
 
 private slots:
     void onTestConnection();
@@ -60,6 +62,23 @@ private slots:
     void onMtgSaveQr();
     void onMtgOpenTelegram();
     void refreshMtgStatus();
+
+    // Reality (VLESS + Xray)
+    void onRealityInstallDeploy();
+    void onRealityGenKeys();
+    void onRealityDeploy();
+    void onRealityRemove();
+    void onRealityStart();
+    void onRealityStop();
+    void onRealityRestart();
+    void onRealityStatus();
+    void onRealityShowQr();
+    void onRealitySaveQr();
+    void onRealityCopyLink();
+    void refreshRealityStatus();
+    void onRealityConnect();
+    void onRealityDisconnect();
+    void onRealityCheckIp();
 
     // Интеграции
     void checkBrowser();
@@ -104,6 +123,12 @@ private:
     // эффективный порт прокси для клиента (443 при выводе через релей)
     QString mtgEffPort() const;
 
+    // Reality-клиент: системный TUN-туннель через sing-box
+    bool ensureSingboxBinary(QString& exeOut, QString& errOut);
+    void sudoRun(const QStringList& args, const QString& desc, DoneFn done = {});
+    void stopTun();
+    void updateRealityClientUi();
+
     // --- утилиты ---
     void log(const QString& s);
     void logOk(const QString& s);
@@ -144,6 +169,34 @@ private:
     QPushButton* m_mtgRestartBtn = nullptr;
     QPushButton* m_mtgStatusBtn = nullptr;
     QPushButton* m_mtgRemoveBtn = nullptr;
+
+    // Reality (VLESS + Xray)
+    QSpinBox* m_realPort = nullptr;
+    QComboBox* m_realDest = nullptr;
+    QComboBox* m_realFlow = nullptr;
+    QComboBox* m_realFp = nullptr;
+    QLineEdit* m_realUuid = nullptr;
+    QLineEdit* m_realPub = nullptr;
+    QLineEdit* m_realPriv = nullptr;
+    QLineEdit* m_realSid = nullptr;
+    QComboBox* m_realTransport = nullptr;
+    QLineEdit* m_realDomain = nullptr;
+    QLineEdit* m_realService = nullptr;
+    QLineEdit* m_realGrpcPort = nullptr;
+    QLabel* m_realStatus = nullptr;
+    QLabel* m_realQr = nullptr;
+    QPushButton* m_realInstallBtn = nullptr;
+    QPushButton* m_realGenBtn = nullptr;
+    QPushButton* m_realStartBtn = nullptr;
+    QPushButton* m_realStopBtn = nullptr;
+    QPushButton* m_realRestartBtn = nullptr;
+    QPushButton* m_realStatusBtn = nullptr;
+    QPushButton* m_realRemoveBtn = nullptr;
+    QPushButton* m_realConnectBtn = nullptr;
+    QPushButton* m_realDisconnectBtn = nullptr;
+    QLabel* m_realClientStatus = nullptr;
+    QString m_sudoPass;                 // пароль sudo (только в памяти сессии)
+    bool m_tunRunning = false;          // активен ли системный TUN-туннель
 
     // Интеграции
     QLabel* m_intBrowserStatus = nullptr;

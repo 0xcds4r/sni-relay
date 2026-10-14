@@ -58,6 +58,59 @@ int main(int argc, char** argv) {
                 << "&secret=" << s.mtgSecret.trimmed() << "\n";
             return 0;
         }
+        if (a == "--reality-link") {
+            QCoreApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            if (s.host.trimmed().isEmpty() || s.realityUuid.trimmed().isEmpty() || s.realityPublicKey.trimmed().isEmpty()) {
+                QTextStream(stderr) << "нет host/realityUuid/realityPublicKey в конфиге\n";
+                return 1;
+            }
+            QTextStream out(stdout);
+            out << gen::realityClientLink(s) << "\n";
+            return 0;
+        }
+        if (a.startsWith("--reality-qr=")) {
+            QApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            const QString path = a.mid(QString("--reality-qr=").size());
+            const QImage img = makeQrImage(gen::realityClientLink(s), 600);
+            if (img.isNull() || !img.save(path, "PNG")) {
+                QTextStream(stderr) << "не удалось создать QR\n";
+                return 1;
+            }
+            QTextStream(stdout) << path << "\n";
+            return 0;
+        }
+        if (a == "--print-reality-client") {
+            QCoreApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            QTextStream out(stdout);
+            out << gen::realityClientConfig(s);
+            return 0;
+        }
+        if (a == "--print-reality-tun") {
+            QCoreApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            QTextStream out(stdout);
+            out << gen::realityTunConfig(s);
+            return 0;
+        }
+        if (a == "--print-reality-install" || a == "--print-reality-keys" ||
+            a == "--print-reality-deploy" || a == "--print-reality-remove") {
+            QCoreApplication app(argc, argv);
+            QCoreApplication::setApplicationName("sni-relay-manager");
+            Settings s = Settings::load();
+            QTextStream out(stdout);
+            if (a == "--print-reality-install") out << gen::realityInstall();
+            else if (a == "--print-reality-keys") out << gen::realityGenKeys();
+            else if (a == "--print-reality-deploy") out << gen::realityDeployScript(s);
+            else out << gen::realityRemove();
+            return 0;
+        }
         if (a == "--print-config-path") {
             QCoreApplication app(argc, argv);
             QCoreApplication::setApplicationName("sni-relay-manager");

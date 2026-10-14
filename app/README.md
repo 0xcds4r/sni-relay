@@ -111,6 +111,8 @@ sni-relay-manager --print-config-path   # путь к config.json
 sni-relay-manager --ssh-test            # проверить SSH-подключение к VDS
 sni-relay-manager --mtg-link            # ссылка t.me/proxy для MTProto
 sni-relay-manager --mtg-qr=qr.png       # сохранить QR (с логотипом) в PNG
+sni-relay-manager --reality-link        # ссылка vless:// для Reality
+sni-relay-manager --reality-qr=r.png    # сохранить QR (vless://) в PNG
 sni-relay-manager --version             # версия
 sni-relay-manager --print-config --host=1.2.3.4
 ```
@@ -121,8 +123,9 @@ sni-relay-manager --print-config --host=1.2.3.4
 2. Вкладка **Домены**: при необходимости отредактируй список.
 3. Вкладка **Релей**: «Развернуть / обновить».
 4. Вкладка **Клиент**: «Прописать домены в /etc/hosts».
-5. Выключи Secure DNS (DoH) в браузере.
-6. Вкладка **Проверка**: «Проверить все домены».
+5. Вкладка **Reality** (по желанию): «Установить Xray и развернуть» → `vless://`/QR — для сайтов, заблокированных по SNI. Транспорт — **Reality (TCP)** или **gRPC + TLS (Cloudflare)**. Кнопка **«Подключиться»** поднимает системный **TUN-туннель** через sing-box (весь трафик через VDS; sing-box скачивается автоматически).
+6. Выключи Secure DNS (DoH) в браузере.
+7. Вкладка **Проверка**: «Проверить все домены».
 
 ## Структура
 
@@ -140,7 +143,7 @@ resources.qrc         иконка, зашитая в бинарь
 ```
 
 Порядок вкладок: VDS · Домены · Релей · Клиент · Проверка · MTProto ·
-Интеграции · FAQ · О программе.
+Reality · Интеграции · FAQ · О программе.
 
 ## Ограничения
 
